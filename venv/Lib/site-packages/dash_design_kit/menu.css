@@ -1,0 +1,17 @@
+/* CollapsibleMenu */
+li.menu-item a {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    width: 100%;
+    top: 0;
+    left: 0;
+}
+
+.menu-item--no-text-decoration {
+    text-decoration: none;
+}
+
+li.menu-item a i {
+    padding: 0px 10px;
+}

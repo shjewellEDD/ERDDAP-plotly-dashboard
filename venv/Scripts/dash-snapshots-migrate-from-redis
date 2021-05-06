@@ -1,0 +1,4 @@
+#!c:\users\jewell\pycharmprojects\erddap testing\venv\scripts\python.exe
+from dash_snapshots.store import database
+
+database.migrate_from_redis_v0()

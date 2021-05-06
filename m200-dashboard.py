@@ -61,7 +61,7 @@ app.layout = html.Div([
                  )
             ]),
     html.Div([
-        html.H3('Column 1'),
+        #html.H3('Column 1'),
         html.Label(['Scientific Data']),
         dcc.Dropdown(
             id="select_sci",
@@ -84,7 +84,7 @@ app.layout = html.Div([
                  )
     ]),
     html.Div([
-        html.H3('Column 2'),
+        #html.H3('Column 2'),
         html.Label(['GPS Data']),
         dcc.Dropdown(
             id="select_gps",
