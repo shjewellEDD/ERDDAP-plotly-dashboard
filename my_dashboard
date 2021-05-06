@@ -1,0 +1,100 @@
+
+# import dash
+# import dash_html_components as html
+# import dash_core_components as dcc
+# import pandas as pd
+#
+# from dash.dependencies import Input, Output
+
+#external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
+import dash
+import dash_design_kit as ddk  # Only available on Dash Enterprise
+import dash_core_components as dcc
+from dash.dependencies import Input, Output
+import plotly.express as px
+import pandas as pd
+import dash_html_components as html
+
+# it has to be a list of dicts, which is one of the more annoying results I've found
+datasets = [
+    {'label': 'TELON1', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELON001.csv'},
+    {'label': 'TELONAS2 Barometric', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv'},
+    {'label': 'TELONAS2 General', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv'},
+    {'label': 'TELONAS2 Engineering', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'},
+    {'label': 'TELONAS2 Load', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv'}
+]
+
+# loaded_datasets = {
+#     'TELON1': pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELON001.csv', skiprows = [1]),
+#     'TELONAS2 Barometric': pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv', skiprows = [1]),
+#     'TELONAS2 General': pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv', skiprows = [1]),
+#     'TELONAS2 Engineering': pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv', skiprows = [1]),
+#     'TELONAS2 Load': pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv', skiprows = [1])
+# }
+
+# datasets = {
+#     'TELON1': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELON001.csv',
+#     'TELONAS2 Barometric': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv',
+#     'TELONAS2 General': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv',
+#     'TELONAS2 Engineering': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
+#     'TELONAS2 Load': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv'
+# }
+
+
+#df = pd.read_csv('https://plotly.github.io/datasets/country_indicators.csv')
+#df = pd.read_csv(datasets[['TELONAS2 General']])
+
+#available_indicators = df['Indicator Name'].unique()
+#vailable_variables = df.columnns
+
+app = dash.Dash(__name__)
+#server = app.server
+
+# controls = [
+#     ddk.ControlItem([
+
+app.layout = html.Div([
+    html.Div([
+        html.Label(['Select Dataset']),
+        dcc.Dropdown(
+            id="select_set",
+            options=datasets,
+            value=datasets[0]['label']
+            #persistance=True,
+            #persistance_type='session'
+        )
+    ]),
+    html.Div([
+        html.Label(['Select Variable']),
+        dcc.Dropdown(
+            id="select_var",
+            options='var_list',
+            value=""
+            # persistance=True,
+            # persistance_type='session'
+        )
+    ]),
+
+    html.Div([
+        dcc.Graph(id='First Graph')
+    ])
+])
+
+
+@app.callback(
+    Output('var_list', 'options'),
+    Input('select_set', 'value'))
+def load_set(dataset):
+    df = pd.read_csv(datasets[dataset], skiprows=[1])
+
+    var_list = []
+    df_vars = list(df.columns)
+
+    for var in df_vars:
+        var_list.append({'label': var, 'value': var})
+
+    return var_list
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
