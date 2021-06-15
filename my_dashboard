@@ -54,6 +54,8 @@ app = dash.Dash(__name__)
 # controls = [
 #     ddk.ControlItem([
 
+var_list = []
+
 app.layout = html.Div([
     html.Div([
         html.Label(['Select Dataset']),
@@ -69,7 +71,7 @@ app.layout = html.Div([
         html.Label(['Select Variable']),
         dcc.Dropdown(
             id="select_var",
-            options='var_list',
+            #options=var_list,
             value=""
             # persistance=True,
             # persistance_type='session'
@@ -83,10 +85,25 @@ app.layout = html.Div([
 
 
 @app.callback(
-    Output('var_list', 'options'),
+    Output('select_var', 'options'),
     Input('select_set', 'value'))
 def load_set(dataset):
-    df = pd.read_csv(datasets[dataset], skiprows=[1])
+    df = pd.read_csv(dataset, skiprows=[1])
+
+    var_list = []
+    df_vars = list(df.columns)
+
+    for var in df_vars:
+        var_list.append({'label': var, 'value': var})
+    #print(var_list)
+
+    return var_list
+
+@app.callback(
+    Output( 'options'),
+    Input('select_var', 'value'))
+def load_set(dataset):
+    df = pd.read_csv(dataset, skiprows=[1])
 
     var_list = []
     df_vars = list(df.columns)

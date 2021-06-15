@@ -40,7 +40,9 @@ app.layout = ddk.App([
                                  children=[ddk.Card(width=100,
                                                     children=[
                                                         dcc.Loading(id='load_loader', children=[
-                                                            ddk.Graph(id="load_plot", config=graph_config)])
+                                                            ddk.Graph(id="load_plot", config=graph_config)]),
+                                                            ]
+                                                        )
                                                     ]
                                                     )
                                            ]
@@ -55,8 +57,6 @@ app.layout = ddk.App([
                                            ]
                                  )
                      ]
-                     )
-        ]
     ),
     ddk.Card(children=[
         ddk.Block(width=6, children=
@@ -118,7 +118,7 @@ def make_graphs(click):
     tmp_figure = go.Scatter(x=load_df['time'], y=load_df['Load_Temp'], name='Load_Temp', hoverinfo='x+y+name')
     baro_figure = go.Scatter(x=load_df['time'], y=baro_df['BaroPres'], name='BaroPres', hoverinfo='x+y+name')
 
-    load_plots = make_subplots(rows=3, cols=1, shared_xaxes='all',
+    load_plots = make_subplots(rows=4, cols=1, shared_xaxes='all',
                                subplot_titles=("TELONAS2 - Load (lbs)",
                                                "TELONAS2 - Load_Temp (℃)",
                                                "TELONAS2 - BaroPres (hPa)"),
@@ -131,6 +131,11 @@ def make_graphs(click):
     load_plots.append_trace(tmp_figure, 2, 1)
     load_plots.append_trace(baro_figure, 3, 1)
 
+    df = pd.read_csv(
+        'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv?time%2Cprofile_id%2CSB_Depth%2CSB_Temp%2CSB_Conductivity%2COptode_Temp%2COptode_Dissolved_O2%2Cwetlab_Chlorophyll&time>=max(time)-2days',
+        #'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv',
+        skiprows=[1])
+
     load_plots['layout'].update(height=900,
                                 title=' ',
                                 hovermode='x unified',
@@ -139,15 +144,13 @@ def make_graphs(click):
                                 yaxis_title='Load', yaxis2_title='Load Temperature', yaxis3_title='Barometric Pressure',
                                 showlegend=False, modebar={'orientation': 'h'}, autosize=True)
 
-    df = pd.read_csv(
-        #'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv?time%2Cprofile_id%2CSB_Depth%2CSB_Temp%2CSB_Conductivity%2COptode_Temp%2COptode_Dissolved_O2%2Cwetlab_Chlorophyll&time>=max(time)-2days',
-        'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv',
-        skiprows=[1])
     tmin = df['time'].min()
     tmax = df['time'].max()
     temp = go.Scatter(x=df["time"], y=df["SB_Depth"],
                       marker=dict(showscale=True, color=df["SB_Temp"], colorscale='Viridis', colorbar=dict(x=.46)),
                       mode='markers', name="SB_Temp", text=df["SB_Temp"])
+    sbt_figure = go.Scatter(x=df['time'], y=df['SB_Temp'], name='SB_Temp', hoverinfo='x+y+name')
+    load_plots.add_trace(sbt_figure, 3, 1)
     cond = go.Scatter(x=df["time"], y=df["SB_Depth"],
                       marker=dict(showscale=True, color=df["SB_Conductivity"], colorscale='Inferno'),
                       mode='markers', name="SB_Conductivity", text=df["SB_Conductivity"])
@@ -180,4 +183,3 @@ def make_graphs(click):
 
 if __name__ == '__main__':
     app.run_server(debug=True)
-
