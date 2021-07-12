@@ -114,6 +114,9 @@ def gen_windows(url, window, res):
 
 windows = gen_windows(url_base, 14, 7)
 dates = list(windows.keys())
+# because Plotly desires dictionaries in everything, here's a dictionary
+# if it's stupid and it works, it's not stupid
+display_dates = dict(zip(range(len(dates)), dates))
 data = pd.read_csv(windows[dates[-1]], skiprows=[1])
 
 def gen_var_list(data):
@@ -144,7 +147,7 @@ app.layout = html.Div([
                                      figure=px.scatter(data,
                                                        y=data['SB_Depth'],
                                                        x=data['time']
-                                                       )
+                                                      )
                                      )],
                  )
     ]),
@@ -153,21 +156,47 @@ app.layout = html.Div([
         dcc.Dropdown(
             id="select_sci",
             options=vars['sci'],
-            #value=vars['sci'][0]['value']
             value=vars['sci'][0]['value']
             #multi=True
+        ),
+        dcc.Slider(
+            id='sci_range',
+            min=0,
+            max=len(dates),
+            marks=display_dates,
+            value=len(dates)-1
         )
+
     ])
 ])
 
-#scientific
+#scientific data selection
 @app.callback(
-    Output('sci-graphic', 'figure'),
-    Input('select_sci', 'value'))
-def plot_svar(select_sci):
-    sfig = px.scatter(data, y=select_sci, x='time')
+    [Output('sci-graphic', 'figure'),
+    Output('select_sci', 'options')],
+    [Input('sci_range', 'value'),
+    Input('select_sci', 'value')])
+def plot_svar(sci_range, select_sci):
 
-    return sfig
+    new_url = windows[display_dates[sci_range]]
+    new_data = pd.read_csv(new_url, skiprows=[1])
+    vars = gen_var_list(new_data)
+    sfig = px.scatter(new_data, y=select_sci, x='time')
+
+    sfig.update_layout()
+
+    return sfig, vars['sci']
+
+# #
+# @app.callback(
+#     Output('sci-graphic', 'figure'),
+#     Input('sci_range', 'value'),
+#     Input('select_sci', 'value'))
+# def refresh_range(sci_range,select_sci):
+#     new_url = windows[display_dates[sci_range]]
+#     new_data = pd.read_csv(new_url, skiprows=[1])
+#     plot_svar(select_sci, new_data)
+
 
 
 if __name__ == '__main__':
