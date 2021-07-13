@@ -8,21 +8,34 @@ import dash_html_components as html
 import datetime
 import requests
 
+import logging
+
+logging.basicConfig(filename='dash_log.log', encoding='utf-8', level=logging.DEBUG)
+logger = logging.getLogger('debug_logger')
+
 graph_config = {'modeBarButtonsToRemove': ['hoverCompareCartesian', 'select2d', 'lasso2d'],
-                 'doubleClick': 'reset+autosize', 'toImageButtonOptions': {'height': None, 'width': None, },
-                 'displaylogo': False}
+                'doubleClick': 'reset+autosize', 'toImageButtonOptions': {'height': None, 'width': None, },
+                'displaylogo': False}
 
 window = 14
 resolution = 7
 
-#url_base = 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv'
-
-datasets = {
-    'TELONAS2 Barometric':  'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv',
-    'TELONAS2 General':     'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv',
-    'TELONAS2 Engineering': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
-    'TELONAS2 Load':        'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv'
-}
+set_meta = {'TELONAS2':
+                {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv',
+                 'win': 14,
+                 'res': 7
+                 },
+            'Load':
+                {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv',
+                 'win': 14,
+                 'res': 7
+                 },
+            'Baro':
+                {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv',
+                 'win': 14,
+                 'res': 7
+                 }
+            }
 
 #data = pd.read_csv(url_base + ".csv", skiprows=[1])
 #data = pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv?&time>=2020-11-09T00:10:00Z&time<=2020-11-23T00:10:00Z', skiprows=[1])
@@ -33,18 +46,8 @@ datasets = {
 
 # will need to be altered for multi-set displays
 
-
-def data_dates(url):
-    page = (requests.get(url[:-3] + "das")).text
-
-    indx = page.find('Float64 actual_range')
-    mdx = page.find(',', indx)
-    endx = page.find(";", mdx)
-    start_time = datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx]))
-    end_time = datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx]))
-
-    return start_time, end_time
-
+# ======================================================================================================================
+# helpful functions
 
 # generates ERDDAP compatable date
 def gen_erddap_date(edate):
@@ -69,113 +72,176 @@ def from_erddap_date(edate):
 
     return redate
 
+# class used for holding useful information about the ERDDAP databases
+# ======================================================================================================================
 
-def gen_url(o_url, t_start, window):
-    base = o_url + "?&time>=" + gen_erddap_date(t_start) + '&' + gen_erddap_date(
-        t_start - datetime.timedelta(days=window))
+class Dataset:
+    logger.info('New dataset initializing')
 
-    return base
+    def __init__(self, url, window, resolution):
+        self.url = url
+        self.t_start, self.t_end = self.data_dates()
+        logger.info('Start and ending dates calculated')
+        logger.info(str(self.t_start))
+        logger.info(str(self.t_end))
+        self.win_size = window
+        self.resolution = resolution
+        self.windows = self.gen_windows()
+        self.dates = list(self.windows.keys())
+        logger.info('Windows calculated')
+        self.display_dates = dict(zip(range(len(self.dates)), self.dates))
+        logger.info('Dates calculated')
+        self.data, self.vars = self.get_data(-1)
+
+    def data_dates(self):
+        page = (requests.get(self.url[:-3] + "das")).text
+
+        indx = page.find('Float64 actual_range')
+        mdx = page.find(',', indx)
+        endx = page.find(";", mdx)
+        start_time = datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx]))
+        end_time = datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx]))
+
+        return start_time, end_time
 
 
-def latest_data(url, window):
-    tstart, tend = data_dates(url)
+    def gen_url(self):
+        self.base = self.url + "?&time>=" + gen_erddap_date(self.t_start) + '&' + gen_erddap_date(
+            self.t_start - datetime.timedelta(days=self.win_size))
 
-    postdate = tend - datetime.timedelta(days=window)
-
-    if postdate < tstart:
-        postdate = tstart
-    else:
-        postdate = gen_erddap_date(postdate)
-
-    return postdate
+        return self.base
 
 
-# generate sets of start and stop dates for the windows
-def gen_windows(url, window, res):
-    window_dict = {}
-    dstart, dstop = data_dates(url)
+    def latest_data(self, win_size):
 
-    # snapshots are the number of windows we will need to cover the entire dataset
+        self.last_date = self.t_end - datetime.timedelta(days=self.win_size)
 
-    snapshots = round((dstop - dstart).days / res) + 1
+        if self.last_date < self.t_start:
+            self.last_date = self.t_start
+        else:
+            self.last_date = gen_erddap_date(self.last_date)
 
-    # the first date is special as it will be from an odd start time
+        return self.last_date
 
-    t_date = str(dstart.year) + "-" + str(dstart.month).zfill(2) + '-' + str(dstart.day).zfill(2)
-    t_url = url + "?&time>=" + gen_erddap_date(dstart) + '&time<=' + gen_erddap_date(
-        dstart + datetime.timedelta(days=window))
-    t0 = dstop - datetime.timedelta(snapshots * res)
 
-    window_dict = {t_date: t_url}
+    # generate sets of start and stop dates for the windows
+    def gen_windows(self):
+        self.windows = {}
 
-    for n in range(snapshots):
+        # snapshots are the number of windows we will need to cover the entire dataset
 
-        nstart = t0 + datetime.timedelta(days=res * n)
-        t_date = str(nstart.year) + "-" + str(nstart.month).zfill(2) + '-' + str(nstart.day).zfill(2)
-        t_url = url + "?&time>=" + gen_erddap_date(nstart) + '&time<=' + gen_erddap_date(
-            nstart + datetime.timedelta(days=window))
+        snapshots = round((self.t_end - self.t_start).days / self.resolution) + 1
 
-        window_dict[t_date] = t_url
+        # the first date is special as it will be from an odd start time
 
-    return window_dict
+        t_date = str(self.t_start.year) + "-" + str(self.t_start.month).zfill(2) + '-' + str(self.t_start.day).zfill(2)
+        t_url = self.url + "?&time>=" + gen_erddap_date(self.t_start) + '&time<=' + gen_erddap_date(
+            self.t_start + datetime.timedelta(days=self.win_size))
+        t0 = self.t_end - datetime.timedelta(snapshots * self.resolution)
 
-def gen_dates(url_base):
-    windows = gen_windows(url_base, 14, 7)
+        self.windows = {t_date: t_url}
 
-    dates = list(windows.keys())
-    # because Plotly desires dictionaries in everything, here's a dictionary
-    # if it's stupid and it works, it's not stupid
-    display_dates = dict(zip(range(len(dates)), dates))
+        for n in range(snapshots):
 
-    data = pd.read_csv(windows[dates[-1]], skiprows=[1])
+            nstart = t0 + datetime.timedelta(days=self.resolution * n)
+            t_date = str(nstart.year) + "-" + str(nstart.month).zfill(2) + '-' + str(nstart.day).zfill(2)
+            t_url = self.url + "?&time>=" + gen_erddap_date(nstart) + '&time<=' + gen_erddap_date(
+                nstart + datetime.timedelta(days=self.win_size))
 
-def gen_var_list(data):
+            self.windows[t_date] = t_url
 
-    skipvars = ['time', 'Time', 'TIME']
+        return self.windows
 
-    # for set in list(data.keys()):
-    var_list = []
-    for var in list(data.columns):
-        if var in skipvars:
-            continue
+    def get_data(self, date_bin):
 
-        var_list.append({'label': var, 'value': var})
+        self.data = pd.read_csv(self.windows[self.dates[date_bin]], skiprows=[1])
 
-    vars ={'sci': var_list}
+        skipvars = ['time', 'Time', 'TIME']
 
-    return vars
+        # for set in list(data.keys()):
+        self.vars = []
+        for var in list(self.data.columns):
+            if var in skipvars:
+                continue
 
-vars = gen_var_list(data)
+            self.vars.append({'label': var, 'value': var})
+
+        return self.data, self.vars
+
+    def ret_data(self):
+
+        return self.data
+
+    def ret_vars(self):
+
+        return self.vars
+
+
+
+sci_set = Dataset(set_meta['TELONAS2']['url'], set_meta['TELONAS2']['win'], set_meta['TELONAS2']['res'])
+eng_set = Dataset(set_meta['Load']['url'], set_meta['Load']['win'], set_meta['Load']['res'])
+baro_set = Dataset(set_meta['Baro']['url'], set_meta['Baro']['win'], set_meta['Baro']['res'])
+
 external_stylesheets = ['https://codepen.io./chriddyp/pen/bWLwgP.css']
 app = dash.Dash(__name__)
-server = app.server
 
 app.layout = html.Div([
     html.Div([
         html.Label(['Science Load']),
         ddk.Card(width=100,
-                 children=[ddk.Graph(id='sci-graphic',
-                                     figure=px.scatter(data,
-                                                       y=data['SB_Depth'],
-                                                       x=data['time']
-                                                       )
-                                     )],
+                 children=[dcc.Loading(id='sci_loader', children=
+                     ddk.Graph(id='sci-graphic',
+                                     figure=px.scatter(sci_set.ret_data(),
+                                                       y=sci_set.ret_data()[sci_set.ret_vars()[0]['value']],
+                                                       x=sci_set.ret_data()['time']
+                                                      )
+                                     )
+                                )],
                  )
     ]),
     html.Div([
         html.Label(['Scientific Data']),
         dcc.Dropdown(
             id="select_sci",
-            options=vars['sci'],
-            value=vars['sci'][0]['value']
+            options=sci_set.ret_vars(),
+            value=sci_set.ret_vars()[0]['value']
             #multi=True
         ),
         dcc.Slider(
             id='sci_range',
             min=0,
-            max=len(dates),
-            marks=display_dates,
-            value=len(dates)-1
+            max=len(sci_set.dates[-1]),
+            marks=sci_set.display_dates,
+            value=len(sci_set.dates)-1
+        )
+    ]),
+    html.Div([
+        html.Label(['Engineering Load']),
+        ddk.Card(width=100,
+                 children=[dcc.Loading(id='eng_loader', children=
+                 ddk.Graph(id='eng-graphic',
+                           figure=px.scatter(eng_set.ret_data(),
+                                             y=eng_set.ret_data()[eng_set.ret_vars()[0]['value']],
+                                             x=eng_set.ret_data()['time']
+                                             )
+                           )
+                                       )],
+                 )
+    ]),
+    html.Div([
+        html.Label(['Enginerring Data']),
+        dcc.Dropdown(
+            id="select_eng",
+            options=eng_set.ret_vars(),
+            value=eng_set.ret_vars()[0]['value']
+            # multi=True
+        ),
+        dcc.Slider(
+            id='eng_range',
+            min=0,
+            max=len(eng_set.dates[-1]),
+            marks=eng_set.display_dates,
+            value=len(eng_set.dates)-1
         )
 
     ])
@@ -183,18 +249,18 @@ app.layout = html.Div([
 
 #scientific data selection
 @app.callback(
-    Output('sci-graphic', 'figure'),
-    Output('select_sci', 'options'),
-    Input('sci_range', 'value'),
-    Input('select_sci', 'value'))
+    [Output('sci-graphic', 'figure'),
+    Output('select_sci', 'options')],
+    [Input('sci_range', 'value'),
+    Input('select_sci', 'value')])
 def plot_svar(sci_range, select_sci):
-    new_url = windows[display_dates[sci_range]]
-    new_data = pd.read_csv(new_url, skiprows=[1])
-    vars = gen_var_list(new_data)
-    sfig = px.scatter(new_data, y=select_sci, x='time')
 
-    return sfig, vars['sci']
+    new_data, vars = sci_set.get_data(sci_range)
+    sfig = px.scatter(new_data, y=new_data[select_sci], x=new_data['time'])
 
+    sfig.update_layout()
+
+    return sfig, vars
 
 
 
