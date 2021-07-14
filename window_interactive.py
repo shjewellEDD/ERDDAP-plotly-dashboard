@@ -1,3 +1,6 @@
+
+
+
 import dash
 import dash_design_kit as ddk  # Only available on Dash Enterprise
 import dash_core_components as dcc
@@ -12,6 +15,7 @@ import logging
 
 logging.basicConfig(filename='dash_log.log', encoding='utf-8', level=logging.DEBUG)
 logger = logging.getLogger('debug_logger')
+filehandler_dbg = logging.FileHandler(logger.name, mode='w')
 
 graph_config = {'modeBarButtonsToRemove': ['hoverCompareCartesian', 'select2d', 'lasso2d'],
                 'doubleClick': 'reset+autosize', 'toImageButtonOptions': {'height': None, 'width': None, },
@@ -82,15 +86,15 @@ class Dataset:
         self.url = url
         self.t_start, self.t_end = self.data_dates()
         logger.info('Start and ending dates calculated')
-        logger.info(str(self.t_start))
-        logger.info(str(self.t_end))
+        logger.info([str(self.t_start), str(self.t_end)])
         self.win_size = window
         self.resolution = resolution
         self.windows = self.gen_windows()
         self.dates = list(self.windows.keys())
         logger.info('Windows calculated')
-        self.display_dates = dict(zip(range(len(self.dates)), self.dates))
+        self.display_dates = dict(zip(range(len(self.dates)), sorted(self.dates)))
         logger.info('Dates calculated')
+        logger.info(self.dates)
         self.data, self.vars = self.get_data(-1)
 
     def data_dates(self):
@@ -229,7 +233,7 @@ app.layout = html.Div([
                  )
     ]),
     html.Div([
-        html.Label(['Enginerring Data']),
+        html.Label(['Engineering Data']),
         dcc.Dropdown(
             id="select_eng",
             options=eng_set.ret_vars(),
@@ -242,6 +246,36 @@ app.layout = html.Div([
             max=len(eng_set.dates[-1]),
             marks=eng_set.display_dates,
             value=len(eng_set.dates)-1
+        )
+
+    ]),
+    html.Div([
+        html.Label(['Baro Load']),
+        ddk.Card(width=100,
+                 children=[dcc.Loading(id='baro_loader', children=
+                 ddk.Graph(id='baro-graphic',
+                           figure=px.scatter(baro_set.ret_data(),
+                                             y=baro_set.ret_data()[baro_set.ret_vars()[0]['value']],
+                                             x=baro_set.ret_data()['time']
+                                             )
+                           )
+                                       )],
+                 )
+    ]),
+    html.Div([
+        html.Label(['Baro Data']),
+        dcc.Dropdown(
+            id="select_baro",
+            options=baro_set.ret_vars(),
+            value=baro_set.ret_vars()[0]['value']
+            # multi=True
+        ),
+        dcc.Slider(
+            id='baro_range',
+            min=0,
+            max=len(baro_set.dates[-1]),
+            marks=baro_set.display_dates,
+            value=len(baro_set.dates) - 1
         )
 
     ])
@@ -261,6 +295,37 @@ def plot_svar(sci_range, select_sci):
     sfig.update_layout()
 
     return sfig, vars
+
+#engineering data selection
+@app.callback(
+    [Output('eng-graphic', 'figure'),
+    Output('select_eng', 'options')],
+    [Input('eng_range', 'value'),
+    Input('select_eng', 'value')])
+def plot_svar(eng_range, select_eng):
+
+    new_data, vars = eng_set.get_data(eng_range)
+    efig = px.scatter(new_data, y=new_data[select_eng], x=new_data['time'])
+
+    efig.update_layout()
+
+    return efig, vars
+
+#engineering data selection
+@app.callback(
+    [Output('baro-graphic', 'figure'),
+    Output('select_baro', 'options')],
+    [Input('baro_range', 'value'),
+    Input('select_baro', 'value')])
+def plot_svar(baro_range, select_baro):
+
+    new_data, vars = baro_set.get_data(baro_range)
+    efig = px.scatter(new_data, y=new_data[select_baro], x=new_data['time'])
+
+    efig.update_layout()
+
+    return efig, vars
+
 
 
 
