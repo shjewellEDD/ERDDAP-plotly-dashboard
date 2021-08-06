@@ -1,3 +1,9 @@
+'''
+TODO:
+Display dates are coming back wrong. Why?
+'''
+
+
 import dash
 import dash_design_kit as ddk  # Only available on Dash Enterprise
 import dash_core_components as dcc
@@ -8,6 +14,7 @@ import dash_html_components as html
 import datetime
 import requests
 
+
 # graph_config = {'modeBarButtonsToRemove': ['hoverCompareCartesian', 'select2d', 'lasso2d'],
 #                 'doubleClick': 'reset+autosize', 'toImageButtonOptions': {'height': None, 'width': None, },
 #                 'displaylogo': False}
@@ -16,6 +23,14 @@ window = 14
 resolution = 7
 
 url_base = 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv'
+eng_base = 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2'
+
+eng_set = [ {'label': 'None', 'value':   ''},
+            {'label': 'Number of Trips', 'value':    'Ntrips'},
+            {'label': 'Depth', 'value':   'depth'},
+            {'label': 'Truck Mode', 'value':   'TruckMode'},
+            {'label': 'Climb Mode', 'value':   'ClimbMode'},
+            ]
 
 #data = pd.read_csv(url_base + ".csv", skiprows=[1])
 #data = pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv?&time>=2020-11-09T00:10:00Z&time<=2020-11-23T00:10:00Z', skiprows=[1])
@@ -131,7 +146,7 @@ def gen_var_list(data):
 
         var_list.append({'label': var, 'value': var})
 
-    vars ={'sci': var_list}
+    vars = {'sci': var_list}
 
     return vars
 
@@ -159,6 +174,13 @@ app.layout = html.Div([
             value=vars['sci'][0]['value']
             #multi=True
         ),
+        html.Label(['Traverse Overlay']),
+        dcc.Dropdown(
+            id="sci_overlay",
+            options=eng_set,
+            value=eng_set[0]['value']
+            # multi=True
+        ),
         dcc.Slider(
             id='sci_range',
             min=0,
@@ -166,7 +188,6 @@ app.layout = html.Div([
             marks=display_dates,
             value=len(dates)-1
         )
-
     ])
 ])
 
@@ -187,6 +208,20 @@ def plot_svar(sci_range, select_sci):
 
     return sfig, vars['sci']
 
+@app.callback(
+    [Output('sci-graphic', 'figure')],
+    [Input('sci_range', 'value'),
+    Input('sci_overlay', 'value')])
+def plot_soverlay(sci_range, sci_overlay):
+
+    new_url = windows[display_dates[sci_range]]
+    new_data = pd.read_csv(new_url, skiprows=[1])
+    vars = gen_var_list(new_data)
+    sfig = px.scatter(new_data, y=select_sci, x='time')
+
+    sfig.update_layout()
+
+    return sfig
 # #
 # @app.callback(
 #     Output('sci-graphic', 'figure'),

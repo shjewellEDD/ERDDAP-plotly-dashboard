@@ -11,11 +11,11 @@ import dash_html_components as html
 import datetime
 import requests
 
-import logging
+#import logging
 
-logging.basicConfig(filename='dash_log.log', encoding='utf-8', level=logging.DEBUG)
-logger = logging.getLogger('debug_logger')
-filehandler_dbg = logging.FileHandler(logger.name, mode='w')
+#logging.basicConfig(filename='dash_log.log', encoding='utf-8', level=logging.DEBUG)
+#logger = logging.getLogger('debug_logger')
+#filehandler_dbg = logging.FileHandler(logger.name, mode='w')
 
 graph_config = {'modeBarButtonsToRemove': ['hoverCompareCartesian', 'select2d', 'lasso2d'],
                 'doubleClick': 'reset+autosize', 'toImageButtonOptions': {'height': None, 'width': None, },
@@ -80,21 +80,21 @@ def from_erddap_date(edate):
 # ======================================================================================================================
 
 class Dataset:
-    logger.info('New dataset initializing')
+    #logger.info('New dataset initializing')
 
     def __init__(self, url, window, resolution):
         self.url = url
         self.t_start, self.t_end = self.data_dates()
-        logger.info('Start and ending dates calculated')
-        logger.info([str(self.t_start), str(self.t_end)])
+        #logger.info('Start and ending dates calculated')
+        #logger.info([str(self.t_start), str(self.t_end)])
         self.win_size = window
         self.resolution = resolution
         self.windows = self.gen_windows()
         self.dates = list(self.windows.keys())
-        logger.info('Windows calculated')
+        #logger.info('Windows calculated')
         self.display_dates = dict(zip(range(len(self.dates)), sorted(self.dates)))
-        logger.info('Dates calculated')
-        logger.info(self.dates)
+        #logger.info('Dates calculated')
+        #logger.info(self.dates)
         self.data, self.vars = self.get_data(-1)
 
     def data_dates(self):
@@ -320,11 +320,11 @@ def plot_svar(eng_range, select_eng):
 def plot_svar(baro_range, select_baro):
 
     new_data, vars = baro_set.get_data(baro_range)
-    efig = px.scatter(new_data, y=new_data[select_baro], x=new_data['time'])
+    bfig = px.scatter(new_data, y=new_data[select_baro], x=new_data['time'])
 
-    efig.update_layout()
+    bfig.update_layout()
 
-    return efig, vars
+    return bfig, vars
 
 
 

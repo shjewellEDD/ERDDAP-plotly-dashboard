@@ -1,5 +1,3 @@
-
-
 import dash
 import dash_design_kit as ddk  # Only available on Dash Enterprise
 import dash_core_components as dcc
@@ -16,14 +14,22 @@ import dash_html_components as html
 #     {'label': 'TELONAS2 Engineering', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'},
 #     {'label': 'TELONAS2 Load', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv'}
 # ]
+#
+# datasets = [
+#     {'label': 'TELON1', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELON001.csv'},
+#     {'label': 'TELONAS2 Barometric', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv'},
+#     {'label': 'TELONAS2 General', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv'},
+#     {'label': 'TELONAS2 Engineering', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'},
+#     {'label': 'TELONAS2 Load', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv'}
+# ]
 
-data = {
-    'baro' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_BARO.csv', skiprows=[1]),
-    'gps' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_GPS_M200.csv', skiprows=[1]),
-    'eng' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv', skiprows=[1]),
-    'sci' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_PRAWC_M200.csv', skiprows=[1]),
-    'wind' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_WIND.csv', skiprows=[1])
-}
+# data = {
+#     'baro' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_BARO.csv', skiprows=[1]),
+#     'gps' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_GPS_M200.csv', skiprows=[1]),
+#     'eng' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv', skiprows=[1]),
+#     'sci' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_PRAWC_M200.csv', skiprows=[1]),
+#     'wind' : pd.read_csv('http://redwing:8080/erddap/tabledap/TELOM200_WIND.csv', skiprows=[1])
+# }
 
 #df = pd.read_csv('https://plotly.github.io/datasets/country_indicators.csv')
 #df = pd.read_csv(datasets[['TELONAS2 General']])
@@ -53,7 +59,7 @@ app.layout = html.Div([
         html.Label(['Barometric Pressure']),
         ddk.Card(width=100,
                  children=[ddk.Graph(id='baro-graphic',
-                                     figure = px.scatter(data['baro'],
+                                     figure=px.scatter(data['baro'],
                                                          y=data['baro']['BaroPres'],
                                                          x=data['baro']['time']
                                                         )
