@@ -64,80 +64,119 @@ def from_erddap_date(edate):
 
     return redate
 
-
-def gen_dataset(url):
-    datasets = gen_urls(url)
-    start = ''
-    eng_data = pd.DataFrame()
-
-    for set in datasets:
-
-        cur_set = url + '//' + set
-        # set_n = set_n + 1
-
-        r = requests.get(cur_set)
-        # content = str(r.content).split('\\n')
-        content = str(r.content).split('%%')
-
-        for sect in content:
-
-            if "PRAWE" in sect:
-
-                block = sect.split('\\r\\n')
-                header = block[1].split(',')
-
-                for line in block:
-
-                    if 'Z' in line:
-                        elems = line.split(',')
-                        eng_data = eng_data.append(pd.DataFrame([elems], columns=header))
+class current_data:
+    def __init__(self, url):
+        self.url = url
+        self.eng_data = self.get_rudics_data()
+        self.eng_data = self.preprocessing()
+        self.err_state, self.fail_state = self.secondary_calcs()
+        self.vars = self.gen_vars()
 
 
+    def get_rudics_data(self):
+        self.eng_data = pd.DataFrame([])
+        datasets = gen_urls(self.url)
+        start = ''
 
-    # for col in int_indx:
-    #     #
-    #     #     eng_data[col] = eng_data[col].astype('int')
+        for set in datasets:
 
-    non_int_sets = []
+            cur_set = self.url + '//' + set
+            # set_n = set_n + 1
 
-    for col in list(eng_data.columns):
+            r = requests.get(cur_set)
+            # content = str(r.content).split('\\n')
+            content = str(r.content).split('%%')
 
-        try:
-            eng_data.loc[:, col] = eng_data.loc[:, col].astype('int')
-        except ValueError:
-            non_int_sets.append(col)
+            for sect in content:
 
-    eng_data.loc[:, 'datetime'] = pd.to_datetime(eng_data.loc[:, 'DT'].apply(from_erddap_date))
-    eng_data.loc[:, 'tdiff'] = eng_data.loc[:, 'datetime'].diff()
+                if "PRAWE" in sect:
 
-    return eng_data
+                    block = sect.split('\\r\\n')
+                    header = block[1].split(',')
 
+                    for line in block:
 
-def gen_vars(data):
-    vars = []
-    for var in list(data.columns):
+                        if 'Z' in line:
+                            elems = line.split(',')
+                            self.eng_data = self.eng_data.append(pd.DataFrame([elems], columns=header))
 
-        if var == 'DT':
-            continue
+        return self.eng_data
 
-        vars.append({'label': var, 'value': var})
+    def preprocessing(self):
 
-    return vars
+        non_int_sets = []
+
+        for col in list(self.eng_data.columns):
+
+            try:
+                self.eng_data.loc[:, col] = self.eng_data.loc[:, col].astype('int')
+            except ValueError:
+                non_int_sets.append(col)
+
+        self.eng_data.loc[:, 'datetime'] = pd.to_datetime(self.eng_data.loc[:, 'DT'].apply(from_erddap_date))
+        self.eng_data.loc[:, 'tdiff'] = self.eng_data.loc[:, 'datetime'].diff()
+
+        for col in int_indx:
+
+            self.eng_data[col] = self.eng_data[col].astype('int')
+
+        return self.eng_data
+
+    def secondary_calcs(self):
+        '''
+        Calculating Extra Variables:
+        Better Datetimes
+        Time Differentials
+        Time to Error
+        Time to Failure
+        '''
+
+        self.fail_state = self.eng_data[self.eng_data['DD'] == 'F']
+
+        if not self.fail_state.empty:
+        #     self.fail_state = False
+        # else:
+           self.fail_state.loc[:, 'tdiff'] = self.fail_state.loc[:, 'datetime'].diff()
+
+        self.error_state = self.eng_data[self.eng_data.loc[:, 'EC'].diff() != 0]
+
+        if not self.error_state.empty:
+        #     self.error_state = False
+        # else:
+            self.error_state.loc[:, 'tdiff'] = self.error_state.loc[:, 'datetime'].diff()
+
+        return self.error_state, self.fail_state
+
+    def gen_vars(self):
+
+        self.vars = []
+
+        if not self.fail_state.empty:
+            self.vars.append({'label': 'Failures', 'value': 'DD'})
+            self.vars.append({'label': 'Time to Failure', 'value': 'TtFail'})
+
+        if not self.error_state.empty:
+            self.vars.append({'label': 'Errors', 'value': 'EC'})
+            self.vars.append({'label': 'Time to Error', 'value': 'TtErr'})
+
+        return self.vars
+
 
 external_stylesheets = ['https://codepen.io./chriddyp/pen/bWLwgP.css']
 app = dash.Dash(__name__)
 
-data = gen_dataset(base_url[0])
-var_list = gen_vars(data)
+cur_set = current_data(base_url[0])
+data = cur_set.eng_data
+var_list = cur_set.vars
 
 app.layout = dhtml.Div([
     dhtml.Div([
         dhtml.Label(['Science Load']),
         ddk.Card(width=100,
-                 children=[ddk.Graph(id='eng-graphic',
-                                     figure=px.scatter(data,
-                                                       x='datetime',
-                                                       y='EC')
+                 children=[ddk.Graph(id='eng-graphic'#,
+                                     # figure=px.scatter(data,
+                                     #                   x='datetime',
+                                     #                   y='EC')
                                      )
                           ],
                  )
@@ -154,7 +193,7 @@ app.layout = dhtml.Div([
         dcc.Dropdown(
             id="select_var",
             options=var_list,
-            value='datetime'
+            value=var_list[0]['value']
         )
 
     ])
@@ -169,21 +208,47 @@ app.layout = dhtml.Div([
      ])
 
 def plot_diag(select_set, select_var):
+    # plotly doesn't let you change data from the outside scope, so we have to reload every time
 
-    data = gen_dataset(select_set)
-    var_list = gen_vars(data)
+    cur_set = current_data(select_set)
+    data = cur_set.eng_data
 
-    figure = px.scatter(data,
-                        y=data.loc[:, select_var],
-                        x=data.loc[:, 'datetime']
-                        )
+    if select_var == 'TtFail':
+        figure = px.scatter(cur_set.fail_state,
+                            y=cur_set.fail_state.loc[:, 'tdiff'].astype('timedelta64[m]'),
+                            x=cur_set.fail_state.loc[:, 'datetime'],
+                            )
+        figure.update_layout(
+                            xaxis_title = "Time to Failure (minutes)",
+                            yaxis_title = "Date"
+                            )
+    elif select_var == 'TtErr':
+        figure = px.scatter(cur_set.err_state,
+                            y=cur_set.err_state.loc[:, 'tdiff'].astype('timedelta64[m]'),
+                            x=cur_set.err_state.loc[:, 'datetime'])
+        figure.update_layout(
+                            yaxis_title = "Time to Error (minutes)",
+                            xaxis_title = "Date"
+                            )
+    elif select_var == 'EC':
+        figure = px.scatter(cur_set.eng_data,
+                            y=cur_set.eng_data.loc[:, select_var],
+                            x=cur_set.eng_data.loc[:, 'datetime']
+                            )
+        figure.update_layout(xaxis_title = "Date",
+                             yaxis_title = 'Error #')
+    elif select_var == 'DD':
+        figure = px.scatter(cur_set.eng_data,
+                            y=cur_set.eng_data.loc[:, select_var],
+                            x=cur_set.eng_data.loc[:, 'datetime']
+                            )
+        figure.update_layout(xaxis_title = "Date",
+                             yaxis_title = 'Failure')
 
-    #figure = px.plot(data, y=data['EC'])
 
-    figure.update_layout()
-
-    return figure, var_list
+    return figure, cur_set.vars
 
 if __name__ == '__main__':
     #app.run_server(host='0.0.0.0', port=8050, debug=True)
+
     app.run_server(debug=True)
