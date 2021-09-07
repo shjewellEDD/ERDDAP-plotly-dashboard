@@ -29,16 +29,19 @@ int_indx = ['MM', 'PN', 'SR', 'IR', 'UL',  'LL', 'IP', 'ET', 'TS', 'EC', 'VM', '
 # user inputs
 base_url = ['http://eclipse.pmel.noaa.gov/rudics/TELO/RM12/',
             'http://eclipse.pmel.noaa.gov/rudics/TELO/RC12/',
-            'http://eclipse.pmel.noaa.gov/rudics/TELO/RC02/'
+            'http://eclipse.pmel.noaa.gov/rudics/TELO/RC02/',
+            'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'
             ]
 
 prawlers = [{'label':   'RM12', 'value':    'http://eclipse.pmel.noaa.gov/rudics/TELO/RM12/'},
             {'label':   'RC02', 'value':    'http://eclipse.pmel.noaa.gov/rudics/TELO/RC02/'},
-            {'label':   'RC12', 'value':    'http://eclipse.pmel.noaa.gov/rudics/TELO/RC12/'}]
+            {'label':   'RC12', 'value':    'http://eclipse.pmel.noaa.gov/rudics/TELO/RC12/'},
+            {'label':   'TELONAS2', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'}]
 
 rudic_sets = {'RM12':   'http://eclipse.pmel.noaa.gov/rudics/TELO/RM12/',
               'RC02':   'http://eclipse.pmel.noaa.gov/rudics/TELO/RC02/',
-              'RC12':   'http://eclipse.pmel.noaa.gov/rudics/TELO/RC12/'}
+              'RC12':   'http://eclipse.pmel.noaa.gov/rudics/TELO/RC12/',
+              'TELONAS2':   'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'}
 
 
 def gen_urls(base):
@@ -63,11 +66,20 @@ def from_erddap_date(edate):
 class current_data:
     def __init__(self, url):
         self.url = url
-        self.eng_data = self.get_rudics_data()
+        self.eng_data = self.get_data()
         self.eng_data = self.preprocessing()
         self.err_state, self.fail_state = self.secondary_calcs()
         self.vars = self.gen_vars()
 
+    def get_data(self):
+
+        if 'rudics' in self.url:
+
+            return self.get_rudics_data()
+
+        if 'erddap' in self.url:
+
+            return self.get_erddap_data()
 
     def get_rudics_data(self):
         self.eng_data = pd.DataFrame([])
@@ -95,6 +107,12 @@ class current_data:
                         if 'Z' in line:
                             elems = line.split(',')
                             self.eng_data = self.eng_data.append(pd.DataFrame([elems], columns=header))
+
+        return self.eng_data
+
+    def get_erddap_data(self):
+
+        self.eng_data = pd.read_csv(self.url, skiprows=[1])
 
         return self.eng_data
 
