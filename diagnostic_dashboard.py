@@ -218,12 +218,12 @@ graph_config = {'modeBarButtonsToRemove' : ['hoverCompareCartesian','select2d', 
                 'doubleClick':  'reset+autosize', 'toImageButtonOptions': { 'height': None, 'width': None, },
                 'displaylogo': False}
 
-colors = {'background': '#111111','text': '#7FDBFF'}
+colors = {'background': '#111111', 'text': '#7FDBFF'}
 
 app.layout = ddk.App([
     ddk.Header([
         ddk.Logo(src=app.get_asset_url('logo.png'), style={
-            'max-height':100,
+            'max-height': 100,
             'width': 'auto'
         }),
         ddk.Title('Prawler Engineering Diagnostic Dashboard'),
