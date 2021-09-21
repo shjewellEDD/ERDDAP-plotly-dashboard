@@ -327,7 +327,18 @@ def plot_evar(select_var, start_date, end_date):
         except TypeError:
             table_data = trip_set.to_dict()
 
-    elif select_var == 'err'
+    elif select_var == 'errs_per_day':
+
+        err_set = eng_set.errs_per_day(start_date, end_date)
+        efig = px.scatter(err_set, y='NErrors', x='days')
+
+        columns = [{"name": 'Day', "id": 'days'},
+                   {'name': select_var, 'id': 'NErrors'}]
+
+        try:
+            table_data = err_set.to_dict('records')
+        except TypeError:
+            table_data = err_set.to_dict()
 
     elif select_var in list(new_data.columns):
         efig = px.scatter(new_data, y=select_var, x='time')
