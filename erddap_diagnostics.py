@@ -107,12 +107,6 @@ class Dataset:
     def __init__(self, url, window_start=False, window_end=False):
         self.url = url
         self.t_start, self.t_end = self.data_dates()
-        # if window_start:
-        #     self.w_start = window_start
-        #     self.w_end = window_end
-        # else:
-        #     self.w_end = self.t_end
-        #     self.w_start = self.t_end - datetime.timedelta(days=7)
         self.data, self.vars = self.get_data()
 
     #opens metadata page and returns start and end datestamps
@@ -127,26 +121,8 @@ class Dataset:
 
         return start_time, end_time
 
-    # def gen_url(self, data_start, data_end):
-    #     if type(data_start) == type('string'):
-    #         self.base = self.url + "?&time>=" + data_start + 'Z&time<=' + data_end + 'Z'
-    #     else:
-    #         self.base = self.url + "?&time>=" + gen_erddap_date(data_start) + '&time<=' + gen_erddap_date(data_end)
-    #
-    #     return self.base
-
 
     def get_data(self):
-
-        #self.data = pd.read_csv(self.windows[self.dates[date_bin]], skiprows=[1])
-
-        # print(self.gen_url(self.w_start, self.w_end))
-        #
-        # try:
-        #     self.data = pd.read_csv(self.gen_url(self.w_start, self.w_end), skiprows=[1])
-        # except urllib.error.HTTPError:
-        #     self.base = requests.get(self.gen_url(self.w_start, self.w_end))
-        #     self.data = pd.read_csv(io.StringIO(self.gen_url(self.w_start, self.w_end)), skiprows=[1])
 
         self.data = pd.read_csv(self.url, skiprows=[1])
 
@@ -160,6 +136,9 @@ class Dataset:
 
             self.vars.append({'label': var, 'value': var})
 
+        self.vars.append({'label': 'Trips Per Day', 'value': 'trips_per_day'})
+        self.vars.append({'label': 'Errors Per Day', 'value': 'errs_per_day'})
+
         return self.data, self.vars
 
     def ret_data(self, w_start, w_end):
@@ -172,17 +151,27 @@ class Dataset:
 
         return self.vars
 
-    # def ret_times(self):
-    #     return self.w_start, self.w_end
+    def trips_per_day(self, w_start, w_end):
 
+        internal_set =self.data[(w_start <= self.data['datetime']) & (self.data['datetime'] <= w_end)]
+        internal_set['datetime'] = internal_set.loc[:, 'time'].apply(from_erddap_date)
+        internal_set['days'] = internal_set.loc[:, 'datetime'].dt.date
+        new_df = pd.DataFrame((internal_set.groupby('days')['NTrips'].max()).diff())[1:]
+        new_df['days'] = new_df.index
 
+        return new_df
 
-# sci_set = Dataset(set_meta['TELONAS2']['url'])
-# load_set = Dataset(set_meta['Load']['url'])
-# baro_set = Dataset(set_meta['Baro']['url'])
+    def errs_per_day(self, w_start, w_end):
+
+        internal_set = self.data[(w_start <= self.data['datetime']) & (self.data['datetime'] <= w_end)]
+        internal_set['datetime'] = internal_set.loc[:, 'time'].apply(from_erddap_date)
+        internal_set['days'] = internal_set.loc[:, 'datetime'].dt.date
+        new_df = pd.DataFrame((internal_set.groupby('days')['NErrors'].max()).diff())[1:]
+        new_df['days'] = new_df.index
+
+        return new_df
+
 eng_set = Dataset(set_meta['Eng']['url'])
-#eng_data = eng_set.ret_data()
-#eng_vars = eng_set.ret_vars()
 
 graph_height = 300
 
@@ -220,7 +209,7 @@ dhtml.Div(style={'backgroundColor': colors['background']},
                                 style={'backgroundColor': colors['background']},
                                 min_date_allowed=eng_set.t_start.date(),
                                 max_date_allowed=eng_set.t_end.date(),
-                                start_date=(eng_set.t_end - datetime.timedelta(days=7)).date(),
+                                start_date=(eng_set.t_end - datetime.timedelta(days=14)).date(),
                                 end_date=eng_set.t_end.date()
                            ),
                             dcc.Dropdown(
@@ -294,13 +283,22 @@ Callbacks
 #engineering data selection
 @app.callback(
     Output('select_var', 'options'),
+    # Output('date-picker', 'min_date_allowed'),
+    # Output('date-picker', 'max_date_allowed'),
+    # Output('date-picker', 'start_date'),
+    # Output('date-picker', 'end_date')],
     Input('select_eng', 'value'))
 
 def change_prawler(dataset):
 
     eng_data = Dataset(dataset)
 
-    return eng_data.ret_vars()
+    # min_date_allowed = eng_set.t_start.date(),
+    # max_date_allowed = eng_set.t_end.date(),
+    # start_date = (eng_set.t_end - datetime.timedelta(days=14)).date(),
+    # end_date = eng_set.t_end.date()
+
+    return eng_data.ret_vars()#, min_date_allowed, max_date_allowed, start_date, end_date
 
 #engineering data selection
 @app.callback(
@@ -317,18 +315,42 @@ def plot_evar(select_var, start_date, end_date):
     new_data = eng_set.ret_data(start_date, end_date)
     t_mean = ''
 
-    if select_var in list(new_data.columns):
+    if select_var == 'trips_per_day':
+        trip_set = eng_set.trips_per_day(start_date, end_date)
+        efig = px.scatter(trip_set, y='NTrips', x='days')
+
+        columns = [{"name": 'Day', "id": 'days'},
+                   {'name': select_var, 'id': 'NTrips'}]
+
+        try:
+            table_data = trip_set.to_dict('records')
+        except TypeError:
+            table_data = trip_set.to_dict()
+
+    elif select_var == 'err'
+
+    elif select_var in list(new_data.columns):
         efig = px.scatter(new_data, y=select_var, x='time')
+
+        columns = [{"name": 'Date', "id": 'datetime'},
+                   {'name': select_var, 'id': select_var}]
+
+        try:
+            table_data = new_data.to_dict('records')
+        except TypeError:
+            table_data = new_data.to_dict()
     else:
         efig = px.scatter(new_data, y=list(new_data.columns)[0], x='time')
 
-    columns = [{"name": 'Date', "id": 'datetime'},
-               {'name': select_var, 'id': select_var}]
+        columns = [{"name": 'Date', "id": 'datetime'},
+                   {'name': select_var, 'id': select_var}]
 
-    try:
-        table_data = new_data.to_dict('records')
-    except TypeError:
-        table_data = new_data.to_dict()
+        try:
+            table_data = new_data.to_dict('records')
+        except TypeError:
+            table_data = new_data.to_dict()
+
+
 
     efig.update_layout(
         plot_bgcolor=colors['background'],
