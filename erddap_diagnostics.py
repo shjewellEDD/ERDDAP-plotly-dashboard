@@ -107,12 +107,12 @@ class Dataset:
     def __init__(self, url, window_start=False, window_end=False):
         self.url = url
         self.t_start, self.t_end = self.data_dates()
-        if window_start:
-            self.w_start = window_start
-            self.w_end = window_end
-        else:
-            self.w_end = self.t_end
-            self.w_start = self.t_end - datetime.timedelta(days=7)
+        # if window_start:
+        #     self.w_start = window_start
+        #     self.w_end = window_end
+        # else:
+        #     self.w_end = self.t_end
+        #     self.w_start = self.t_end - datetime.timedelta(days=7)
         self.data, self.vars = self.get_data()
 
     #opens metadata page and returns start and end datestamps
@@ -127,27 +127,28 @@ class Dataset:
 
         return start_time, end_time
 
-    def gen_url(self, data_start, data_end):
-        if type(data_start) == type('string'):
-            self.base = self.url + "?&time>=" + data_start + 'Z&time<=' + data_end + 'Z'
-        else:
-            self.base = self.url + "?&time>=" + gen_erddap_date(data_start) + '&time<=' + gen_erddap_date(data_end)
-
-        return self.base
+    # def gen_url(self, data_start, data_end):
+    #     if type(data_start) == type('string'):
+    #         self.base = self.url + "?&time>=" + data_start + 'Z&time<=' + data_end + 'Z'
+    #     else:
+    #         self.base = self.url + "?&time>=" + gen_erddap_date(data_start) + '&time<=' + gen_erddap_date(data_end)
+    #
+    #     return self.base
 
 
     def get_data(self):
 
         #self.data = pd.read_csv(self.windows[self.dates[date_bin]], skiprows=[1])
 
-        print(self.gen_url(self.w_start, self.w_end))
+        # print(self.gen_url(self.w_start, self.w_end))
+        #
+        # try:
+        #     self.data = pd.read_csv(self.gen_url(self.w_start, self.w_end), skiprows=[1])
+        # except urllib.error.HTTPError:
+        #     self.base = requests.get(self.gen_url(self.w_start, self.w_end))
+        #     self.data = pd.read_csv(io.StringIO(self.gen_url(self.w_start, self.w_end)), skiprows=[1])
 
-        try:
-            self.data = pd.read_csv(self.gen_url(self.w_start, self.w_end), skiprows=[1])
-        except urllib.error.HTTPError:
-            self.base = requests.get(self.gen_url(self.w_start, self.w_end))
-            self.data = pd.read_csv(io.StringIO(self.gen_url(self.w_start, self.w_end)), skiprows=[1])
-
+        self.data = pd.read_csv(self.url, skiprows=[1])
 
         skipvars = ['time', 'Time', 'TIME', 'latitude', 'longitude']
 
@@ -161,16 +162,18 @@ class Dataset:
 
         return self.data, self.vars
 
-    def ret_data(self):
+    def ret_data(self, w_start, w_end):
 
-        return self.data
+        self.data['datetime'] = self.data.loc[:, 'time'].apply(from_erddap_date)
+
+        return self.data[(w_start <= self.data['datetime']) & (self.data['datetime'] <= w_end)]
 
     def ret_vars(self):
 
         return self.vars
 
-    def ret_times(self):
-        return self.w_start, self.w_end
+    # def ret_times(self):
+    #     return self.w_start, self.w_end
 
 
 
@@ -178,9 +181,8 @@ class Dataset:
 # load_set = Dataset(set_meta['Load']['url'])
 # baro_set = Dataset(set_meta['Baro']['url'])
 eng_set = Dataset(set_meta['Eng']['url'])
-eng_data = eng_set.ret_data()
-eng_vars = eng_set.ret_vars()
-eng_start, eng_end = eng_set.ret_times()
+#eng_data = eng_set.ret_data()
+#eng_vars = eng_set.ret_vars()
 
 graph_height = 300
 
@@ -291,26 +293,36 @@ Callbacks
 
 #engineering data selection
 @app.callback(
+    Output('select_var', 'options'),
+    Input('select_eng', 'value'))
+
+def change_prawler(dataset):
+
+    eng_data = Dataset(dataset)
+
+    return eng_data.ret_vars()
+
+#engineering data selection
+@app.callback(
     [Output('eng-graphic', 'figure'),
-     Output('select_var', 'options'),
      Output('table', 'data'),
-     Output('table', 'columns'),
-     Output('t_mean', 'value')],
-    [Input('select_eng', 'value'),
-     Input('select_var', 'value'),
+     Output('table', 'columns')],
+     #Output('t_mean', 'value')],
+    [Input('select_var', 'value'),
      Input('date-picker', 'start_date'),
      Input('date-picker', 'end_date')])
 
-def plot_evar(dataset, select_var, start_date, end_date):
+def plot_evar(select_var, start_date, end_date):
 
-    eng_set = Dataset(dataset, start_date, end_date)
-    new_data = eng_set.ret_data()
-    vars = eng_set.ret_vars()
+    new_data = eng_set.ret_data(start_date, end_date)
     t_mean = ''
 
-    efig = px.scatter(new_data, y=select_var, x='time')
+    if select_var in list(new_data.columns):
+        efig = px.scatter(new_data, y=select_var, x='time')
+    else:
+        efig = px.scatter(new_data, y=list(new_data.columns)[0], x='time')
 
-    columns = [{"name": 'Date', "id": 'time'},
+    columns = [{"name": 'Date', "id": 'datetime'},
                {'name': select_var, 'id': select_var}]
 
     try:
@@ -324,7 +336,7 @@ def plot_evar(dataset, select_var, start_date, end_date):
         font_color=colors['text']
     )
 
-    return efig, vars, table_data, columns, t_mean
+    return efig, table_data, columns#, t_mean
 
 
 if __name__ == '__main__':
