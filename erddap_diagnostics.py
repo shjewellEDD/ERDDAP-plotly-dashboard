@@ -137,17 +137,22 @@ class Dataset:
     def get_data(self):
 
         self.data = pd.read_csv(self.url, skiprows=[1])
+        dat_vars = self.data.columns
 
         # for set in list(data.keys()):
         self.vars = []
-        for var in list(self.data.columns):
+        for var in list(dat_vars):
             if var in skipvars:
                 continue
 
             self.vars.append({'label': var, 'value': var.lower()})
 
-        self.vars.append({'label': 'Trips Per Day', 'value': 'trips_per_day'})
-        self.vars.append({'label': 'Errors Per Day', 'value': 'errs_per_day'})
+        vars_lower = [each_str.lower() for each_str in dat_vars]
+
+        if 'nerrors' in vars_lower:
+            self.vars.append({'label': 'Errors Per Day', 'value': 'errs_per_day'})
+        if 'ntrips' in vars_lower:
+            self.vars.append({'label': 'Trips Per Day', 'value': 'trips_per_day'})
 
         self.data.columns = self.data.columns.str.lower()
 
