@@ -1,6 +1,7 @@
 '''
 TODO:
-    Dataset.get_data() is being called repeatedly for each pass. Why?
+    Improve style sheet
+    May need to pre-load datasets... sigh
 '''
 
 import dash
@@ -32,6 +33,12 @@ prawlers = [
             {'label':   'MCL0', 'value': 'http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv'}
             ]
 
+prawlers = [
+            {'label':   'TELONAS2', 'value': 'TELONAS2'},
+            {'label':   'M200', 'value': 'M200'},
+            {'label':   'MCL0', 'value': 'MCL0'}
+            ]
+
 dataset_dict = {
             'TELONAS2': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
             'M200': 'http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv',
@@ -60,6 +67,8 @@ set_meta = {'TELONAS2':
                  'win': 14,
                  'res': 7}
             }
+
+skipvars = ['time', 'Time', 'TIME', 'latitude', 'longitude', 'dir', 'Dir']
 
 #data = pd.read_csv(url_base + ".csv", skiprows=[1])
 #data = pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv?&time>=2020-11-09T00:10:00Z&time<=2020-11-23T00:10:00Z', skiprows=[1])
@@ -96,8 +105,9 @@ def from_erddap_date(edate):
 
     return redate
 
-# class used for holding useful information about the ERDDAP databases
-# ======================================================================================================================
+''' class used for holding useful information about the ERDDAP databases
+========================================================================================================================
+'''
 
 class Dataset:
     #dataset object,
@@ -126,18 +136,18 @@ class Dataset:
 
         self.data = pd.read_csv(self.url, skiprows=[1])
 
-        skipvars = ['time', 'Time', 'TIME', 'latitude', 'longitude']
-
         # for set in list(data.keys()):
         self.vars = []
         for var in list(self.data.columns):
             if var in skipvars:
                 continue
 
-            self.vars.append({'label': var, 'value': var})
+            self.vars.append({'label': var, 'value': var.lower()})
 
         self.vars.append({'label': 'Trips Per Day', 'value': 'trips_per_day'})
         self.vars.append({'label': 'Errors Per Day', 'value': 'errs_per_day'})
+
+        self.data.columns = self.data.columns.str.lower()
 
         return self.data, self.vars
 
@@ -170,6 +180,12 @@ class Dataset:
         new_df['days'] = new_df.index
 
         return new_df
+
+'''
+========================================================================================================================
+Start Dashboard
+'''
+
 
 eng_set = Dataset(set_meta['Eng']['url'])
 
@@ -234,6 +250,7 @@ dhtml.Div(style={'backgroundColor': colors['background']},
                  style={'backgroundColor': colors['background']},
                  children=[dcc.Textarea(id='t_mean',
                                         value='',
+                                        readOnly=True,
                                         style={'width': '100%', 'height': 40,
                                                'backgroundColor': colors['background']},
                                         ),
@@ -282,30 +299,32 @@ Callbacks
 
 #engineering data selection
 @app.callback(
-    Output('select_var', 'options'),
-    # Output('date-picker', 'min_date_allowed'),
-    # Output('date-picker', 'max_date_allowed'),
-    # Output('date-picker', 'start_date'),
-    # Output('date-picker', 'end_date')],
+    [Output('select_var', 'options'),
+    Output('date-picker', 'min_date_allowed'),
+    Output('date-picker', 'max_date_allowed'),
+    Output('date-picker', 'start_date'),
+    Output('date-picker', 'end_date'),
+    Output('select_var', 'value')],
     Input('select_eng', 'value'))
 
 def change_prawler(dataset):
 
     eng_data = Dataset(dataset)
 
-    # min_date_allowed = eng_set.t_start.date(),
-    # max_date_allowed = eng_set.t_end.date(),
-    # start_date = (eng_set.t_end - datetime.timedelta(days=14)).date(),
-    # end_date = eng_set.t_end.date()
+    min_date_allowed = eng_set.t_start.date(),
+    max_date_allowed = eng_set.t_end.date(),
+    start_date = (eng_set.t_end - datetime.timedelta(days=14)).date(),
+    end_date = eng_set.t_end.date()
+    first_var = eng_set.ret_vars()[0]['value']
 
-    return eng_data.ret_vars()#, min_date_allowed, max_date_allowed, start_date, end_date
+    return eng_data.ret_vars(), str(min_date_allowed[0]), str(max_date_allowed[0]), str(start_date[0]), str(end_date), first_var
 
 #engineering data selection
 @app.callback(
     [Output('eng-graphic', 'figure'),
      Output('table', 'data'),
-     Output('table', 'columns')],
-     #Output('t_mean', 'value')],
+     Output('table', 'columns'),
+     Output('t_mean', 'value')],
     [Input('select_var', 'value'),
      Input('date-picker', 'start_date'),
      Input('date-picker', 'end_date')])
@@ -322,6 +341,8 @@ def plot_evar(select_var, start_date, end_date):
         columns = [{"name": 'Day', "id": 'days'},
                    {'name': select_var, 'id': 'NTrips'}]
 
+        t_mean = trip_set['NTrips'].mean()
+
         try:
             table_data = trip_set.to_dict('records')
         except TypeError:
@@ -335,32 +356,29 @@ def plot_evar(select_var, start_date, end_date):
         columns = [{"name": 'Day', "id": 'days'},
                    {'name': select_var, 'id': 'NErrors'}]
 
+        t_mean = err_set['NErrors'].mean()
+
         try:
             table_data = err_set.to_dict('records')
         except TypeError:
             table_data = err_set.to_dict()
 
-    elif select_var in list(new_data.columns):
+    #elif select_var in list(new_data.columns):
+    else:
         efig = px.scatter(new_data, y=select_var, x='time')
 
         columns = [{"name": 'Date', "id": 'datetime'},
                    {'name': select_var, 'id': select_var}]
 
         try:
-            table_data = new_data.to_dict('records')
+            t_mean = eng_set[select_var].mean()
         except TypeError:
-            table_data = new_data.to_dict()
-    else:
-        efig = px.scatter(new_data, y=list(new_data.columns)[0], x='time')
-
-        columns = [{"name": 'Date', "id": 'datetime'},
-                   {'name': select_var, 'id': select_var}]
+            t_mean = ''
 
         try:
             table_data = new_data.to_dict('records')
         except TypeError:
             table_data = new_data.to_dict()
-
 
 
     efig.update_layout(
@@ -369,7 +387,7 @@ def plot_evar(select_var, start_date, end_date):
         font_color=colors['text']
     )
 
-    return efig, table_data, columns#, t_mean
+    return efig, table_data, columns, t_mean
 
 
 if __name__ == '__main__':
