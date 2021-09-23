@@ -27,11 +27,11 @@ import urllib
 #logger = logging.getLogger('debug_logger')
 #filehandler_dbg = logging.FileHandler(logger.name, mode='w')
 
-prawlers = [
-            {'label':   'TELONAS2', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'},
-            {'label':   'M200', 'value': 'http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv'},
-            {'label':   'MCL0', 'value': 'http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv'}
-            ]
+# prawlers = [
+#             {'label':   'TELONAS2', 'value': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'},
+#             {'label':   'M200', 'value': 'http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv'},
+#             {'label':   'MCL0', 'value': 'http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv'}
+#             ]
 
 prawlers = [
             {'label':   'TELONAS2', 'value': 'TELONAS2'},
@@ -39,34 +39,36 @@ prawlers = [
             {'label':   'MCL0', 'value': 'MCL0'}
             ]
 
-dataset_dict = {
-            'TELONAS2': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
-            'M200': 'http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv',
-            'MCL0': 'http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv'
-            }
+# dataset_dict = {
+#             'TELONAS2': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
+#             'M200': 'http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv',
+#             'MCL0': 'http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv'
+#             }
+
+
 window = 14
 resolution = 7
 
-set_meta = {'TELONAS2':
-                {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv',
-                 'win': 14,
-                 'res': 7
-                 },
-            'Load':
-                {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv',
-                 'win': 14,
-                 'res': 7
-                 },
-            'Baro':
-                {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv',
-                 'win': 14,
-                 'res': 7
-                 },
-            'Eng':
-                {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
-                 'win': 14,
-                 'res': 7}
-            }
+# set_meta = {'TELONAS2':
+#                 {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv',
+#                  'win': 14,
+#                  'res': 7
+#                  },
+#             'Load':
+#                 {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv',
+#                  'win': 14,
+#                  'res': 7
+#                  },
+#             'Baro':
+#                 {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv',
+#                  'win': 14,
+#                  'res': 7
+#                  },
+#             'Eng':
+#                 {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
+#                  'win': 14,
+#                  'res': 7}
+#             }
 
 skipvars = ['time', 'Time', 'TIME', 'latitude', 'longitude', 'dir', 'Dir']
 
@@ -166,7 +168,7 @@ class Dataset:
         internal_set =self.data[(w_start <= self.data['datetime']) & (self.data['datetime'] <= w_end)]
         internal_set['datetime'] = internal_set.loc[:, 'time'].apply(from_erddap_date)
         internal_set['days'] = internal_set.loc[:, 'datetime'].dt.date
-        new_df = pd.DataFrame((internal_set.groupby('days')['NTrips'].max()).diff())[1:]
+        new_df = pd.DataFrame((internal_set.groupby('days')['ntrips'].max()).diff())[1:]
         new_df['days'] = new_df.index
 
         return new_df
@@ -176,7 +178,7 @@ class Dataset:
         internal_set = self.data[(w_start <= self.data['datetime']) & (self.data['datetime'] <= w_end)]
         internal_set['datetime'] = internal_set.loc[:, 'time'].apply(from_erddap_date)
         internal_set['days'] = internal_set.loc[:, 'datetime'].dt.date
-        new_df = pd.DataFrame((internal_set.groupby('days')['NErrors'].max()).diff())[1:]
+        new_df = pd.DataFrame((internal_set.groupby('days')['nerrors'].max()).diff())[1:]
         new_df['days'] = new_df.index
 
         return new_df
@@ -186,8 +188,14 @@ class Dataset:
 Start Dashboard
 '''
 
+dataset_dict = {
+            'TELONAS2': Dataset('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'),
+            'M200': Dataset('http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv'),
+            'MCL0': Dataset('http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv')
+            }
 
-eng_set = Dataset(set_meta['Eng']['url'])
+#eng_set = Dataset(set_meta['Eng']['url'])
+starting_set = "TELONAS2"
 
 graph_height = 300
 
@@ -223,10 +231,10 @@ dhtml.Div(style={'backgroundColor': colors['background']},
                             dcc.DatePickerRange(
                                 id='date-picker',
                                 style={'backgroundColor': colors['background']},
-                                min_date_allowed=eng_set.t_start.date(),
-                                max_date_allowed=eng_set.t_end.date(),
-                                start_date=(eng_set.t_end - datetime.timedelta(days=14)).date(),
-                                end_date=eng_set.t_end.date()
+                                min_date_allowed=dataset_dict[starting_set].t_start.date(),
+                                max_date_allowed=dataset_dict[starting_set].t_end.date(),
+                                start_date=(dataset_dict[starting_set].t_end - datetime.timedelta(days=14)).date(),
+                                end_date=dataset_dict[starting_set].t_end.date()
                            ),
                             dcc.Dropdown(
                                 id="select_eng",
@@ -240,8 +248,8 @@ dhtml.Div(style={'backgroundColor': colors['background']},
                                 id="select_var",
                                 style={'backgroundColor': colors['background'],
                                        'textColor': colors['text']},
-                                options=eng_set.ret_vars(),
-                                value=eng_set.ret_vars()[0]['value'],
+                                options=dataset_dict[starting_set].ret_vars(),
+                                value=dataset_dict[starting_set].ret_vars()[0]['value'],
                                 clearable=False
                             ),
                 ],
@@ -309,7 +317,7 @@ Callbacks
 
 def change_prawler(dataset):
 
-    eng_data = Dataset(dataset)
+    eng_set = dataset_dict[dataset]
 
     min_date_allowed = eng_set.t_start.date(),
     max_date_allowed = eng_set.t_end.date(),
@@ -317,7 +325,7 @@ def change_prawler(dataset):
     end_date = eng_set.t_end.date()
     first_var = eng_set.ret_vars()[0]['value']
 
-    return eng_data.ret_vars(), str(min_date_allowed[0]), str(max_date_allowed[0]), str(start_date[0]), str(end_date), first_var
+    return dataset_dict[dataset].ret_vars(), str(min_date_allowed[0]), str(max_date_allowed[0]), str(start_date[0]), str(end_date), first_var
 
 #engineering data selection
 @app.callback(
@@ -325,23 +333,25 @@ def change_prawler(dataset):
      Output('table', 'data'),
      Output('table', 'columns'),
      Output('t_mean', 'value')],
-    [Input('select_var', 'value'),
+    [Input('select_eng', 'value'),
+     Input('select_var', 'value'),
      Input('date-picker', 'start_date'),
      Input('date-picker', 'end_date')])
 
-def plot_evar(select_var, start_date, end_date):
+def plot_evar(dataset, select_var, start_date, end_date):
 
+    eng_set = dataset_dict[dataset]
     new_data = eng_set.ret_data(start_date, end_date)
     t_mean = ''
 
     if select_var == 'trips_per_day':
         trip_set = eng_set.trips_per_day(start_date, end_date)
-        efig = px.scatter(trip_set, y='NTrips', x='days')
+        efig = px.scatter(trip_set, y='ntrips', x='days')
 
         columns = [{"name": 'Day', "id": 'days'},
-                   {'name': select_var, 'id': 'NTrips'}]
+                   {'name': select_var, 'id': 'ntrips'}]
 
-        t_mean = trip_set['NTrips'].mean()
+        t_mean = "Mean Trips per day: " + str(trip_set['ntrips'].mean())
 
         try:
             table_data = trip_set.to_dict('records')
@@ -351,12 +361,12 @@ def plot_evar(select_var, start_date, end_date):
     elif select_var == 'errs_per_day':
 
         err_set = eng_set.errs_per_day(start_date, end_date)
-        efig = px.scatter(err_set, y='NErrors', x='days')
+        efig = px.scatter(err_set, y='nerrors', x='days')
 
         columns = [{"name": 'Day', "id": 'days'},
-                   {'name': select_var, 'id': 'NErrors'}]
+                   {'name': select_var, 'id': 'nerrors'}]
 
-        t_mean = err_set['NErrors'].mean()
+        t_mean = 'Mean errors per day ' + str(err_set['nerrors'].mean())
 
         try:
             table_data = err_set.to_dict('records')
@@ -371,7 +381,7 @@ def plot_evar(select_var, start_date, end_date):
                    {'name': select_var, 'id': select_var}]
 
         try:
-            t_mean = eng_set[select_var].mean()
+            t_mean = 'Average ' + select_var + ': ' + str(new_data[select_var].mean())
         except TypeError:
             t_mean = ''
 
