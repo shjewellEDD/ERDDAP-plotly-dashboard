@@ -1,7 +1,13 @@
 '''
 TODO:
+    Date errors
+        M200 science has a bunch of dates from the 70s and 80s
+        How do we deal with this
+        Just drop?
+        Linearly interpolate?
+    Generalize plotting, so I don't need separate functions to do it.
+
     Improve style sheet
-    May need to pre-load datasets... sigh
 '''
 
 import dash
@@ -33,44 +39,21 @@ import urllib
 #             {'label':   'MCL0', 'value': 'http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv'}
 #             ]
 
-prawlers = [
-            {'label':   'TELONAS2', 'value': 'TELONAS2'},
-            {'label':   'M200', 'value': 'M200'},
-            {'label':   'MCL0', 'value': 'MCL0'}
+prawlers = [{'label':   'TELONAS2 Eng', 'value': 'TELONAS2Eng'},
+            {'label':   'TELONAS2 Baro', 'value': 'TELONAS2Baro'},
+            {'label':   'TELONAS2 Load', 'value': 'TELONAS2Load'},
+            {'label':   'TELONAS2 Gen', 'value':  'TELONAS2Gen'},
+            {'label':   'M200 Eng', 'value': 'M200Eng'},
+            {'label':   'M200 Sci', 'value': 'M200Sci'},
+            {'label':   'M200 Wind', 'value': 'M200Wind'},
+            {'label':   'M200 Baro', 'value': 'M200Baro'},
+            {'label':   'MCL0 Eng', 'value': 'MCL0Eng'},
+            {'label':   'MCL0 Sci', 'value': 'MCL0Sci'},
+            {'label':   'MCL0 Temp', 'value': 'MCL0Temp'}
             ]
 
-# dataset_dict = {
-#             'TELONAS2': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
-#             'M200': 'http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv',
-#             'MCL0': 'http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv'
-#             }
 
-
-window = 14
-resolution = 7
-
-# set_meta = {'TELONAS2':
-#                 {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv',
-#                  'win': 14,
-#                  'res': 7
-#                  },
-#             'Load':
-#                 {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv',
-#                  'win': 14,
-#                  'res': 7
-#                  },
-#             'Baro':
-#                 {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv',
-#                  'win': 14,
-#                  'res': 7
-#                  },
-#             'Eng':
-#                 {'url': 'https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv',
-#                  'win': 14,
-#                  'res': 7}
-#             }
-
-skipvars = ['time', 'Time', 'TIME', 'latitude', 'longitude', 'dir', 'Dir']
+skipvars = ['time', 'Time', 'TIME', 'latitude', 'longitude']
 
 #data = pd.read_csv(url_base + ".csv", skiprows=[1])
 #data = pd.read_csv('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv?&time>=2020-11-09T00:10:00Z&time<=2020-11-23T00:10:00Z', skiprows=[1])
@@ -131,6 +114,10 @@ class Dataset:
         start_time = datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx]))
         end_time = datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx]))
 
+        #prevents dashboard from trying to read data from THE FUTURE!
+        if end_time > datetime.datetime.now():
+            end_time = datetime.datetime.now()
+
         return start_time, end_time
 
 
@@ -153,8 +140,16 @@ class Dataset:
             self.vars.append({'label': 'Errors Per Day', 'value': 'errs_per_day'})
         if 'ntrips' in vars_lower:
             self.vars.append({'label': 'Trips Per Day', 'value': 'trips_per_day'})
+        if 'sb_depth' in vars_lower:
+            self.vars.append({'label': 'Sci Profiles Per Day', 'value': 'sci_profs'})
 
         self.data.columns = self.data.columns.str.lower()
+
+        if 'dir' in list(self.data.columns):
+            if not self.data[self.data['dir'] == 'F'].empty:
+
+                self.vars.append({'label': 'Failures', 'value': 'failures'})
+                self.vars.append({'lable': 'Time to Failure', 'value': 'time_to_fail'})
 
         return self.data, self.vars
 
@@ -173,7 +168,7 @@ class Dataset:
         internal_set =self.data[(w_start <= self.data['datetime']) & (self.data['datetime'] <= w_end)]
         internal_set['datetime'] = internal_set.loc[:, 'time'].apply(from_erddap_date)
         internal_set['days'] = internal_set.loc[:, 'datetime'].dt.date
-        new_df = pd.DataFrame((internal_set.groupby('days')['ntrips'].max()).diff())[1:]
+        new_df = pd.DataFrame((internal_set.groupby('days')['ntrips'].last()).diff())[1:]
         new_df['days'] = new_df.index
 
         return new_df
@@ -183,24 +178,55 @@ class Dataset:
         internal_set = self.data[(w_start <= self.data['datetime']) & (self.data['datetime'] <= w_end)]
         internal_set['datetime'] = internal_set.loc[:, 'time'].apply(from_erddap_date)
         internal_set['days'] = internal_set.loc[:, 'datetime'].dt.date
-        new_df = pd.DataFrame((internal_set.groupby('days')['nerrors'].max()).diff())[1:]
+        new_df = pd.DataFrame((internal_set.groupby('days')['nerrors'].last()).diff())[1:]
         new_df['days'] = new_df.index
 
         return new_df
 
+    def gen_fail_set(self):
+
+        fail_set = self.data[self.data['dir'] == 'F']
+
+        fail_set['datetime'] = fail_set.loc[:, 'time'].apply(from_erddap_date)
+        fail_set['days'] = fail_set.loc[:, 'datetime'].dt.date
+        fail_set = pd.DataFrame((fail_set.groupby('days')['dir'].last()).diff())[1:]
+        fail_set['days'] = fail_set.index
+
+        return fail_set
+
+    def sci_profiles_per_day(self, w_start, w_end):
+
+        sci_set = self.data[self.data.loc[:, 'sb_depth'].diff() < -35]
+        sci_set['ntrips'] = sci_set['sb_depth'].diff()
+
+        sci_set['datetime'] = sci_set.loc[:, 'time'].apply(from_erddap_date)
+        sci_set['days'] = sci_set.loc[:, 'datetime'].dt.date
+        sci_set = pd.DataFrame((sci_set.groupby('days')['ntrips'].size()))
+        sci_set['days'] = sci_set.index
+
+        return sci_set
 '''
 ========================================================================================================================
 Start Dashboard
 '''
 
+
 dataset_dict = {
-            'TELONAS2': Dataset('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'),
-            'M200': Dataset('http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv'),
-            'MCL0': Dataset('http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv')
+            'TELONAS2Eng': Dataset('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_eng_TELONAS2.csv'),
+            'TELONAS2Baro': Dataset('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_baro_TELONAS2.csv'),
+            'TELONAS2Load': Dataset('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_load_TELONAS2.csv'),
+            'TELONAS2Gen': Dataset('https://data.pmel.noaa.gov/engineering/erddap/tabledap/prawler_TELONAS2.csv'),
+            'M200Eng': Dataset('http://redwing:8080/erddap/tabledap/TELOM200_PRAWE_M200.csv'),
+            'M200Sci': Dataset('http://redwing:8080/erddap/tabledap/TELOM200_PRAWC_M200.csv'),
+            'M200Wind': Dataset('http://redwing:8080/erddap/tabledap/TELOM200_WIND.csv'),
+            'M200Baro': Dataset('http://redwing:8080/erddap/tabledap/TELOM200_BARO.csv'),
+            'MCL0Eng': Dataset('http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWE_MCL0.csv'),
+            'MCL0Sci': Dataset('http://redwing:8080/erddap/tabledap/TELOMCL0_PRAWC_MCL0.csv'),
+            'MCL0Temp': Dataset('http://redwing:8080/erddap/tabledap/TELOM200_ATRH.csv')
             }
 
 #eng_set = Dataset(set_meta['Eng']['url'])
-starting_set = "TELONAS2"
+starting_set = "TELONAS2Eng"
 
 graph_height = 300
 
@@ -378,7 +404,23 @@ def plot_evar(dataset, select_var, start_date, end_date):
         except TypeError:
             table_data = err_set.to_dict()
 
+    elif select_var == 'sci_profs':
+
+        sci_set = eng_set.sci_profiles_per_day(start_date, end_date)
+        efig = px.scatter(sci_set, y='ntrips', x='days')
+
+        columns = [{"name": 'Day', "id": 'days'},
+                   {'name': select_var, 'id': 'ntrips'}]
+
+        t_mean = 'Mean errors per day ' + str(sci_set['ntrips'].mean())
+
+        try:
+            table_data = sci_set.to_dict('records')
+        except TypeError:
+            table_data = sci_set.to_dict()
+
     #elif select_var in list(new_data.columns):
+
     else:
         efig = px.scatter(new_data, y=select_var, x='time')
 
@@ -386,7 +428,7 @@ def plot_evar(dataset, select_var, start_date, end_date):
                    {'name': select_var, 'id': select_var}]
 
         try:
-            t_mean = 'Average ' + select_var + ': ' + str(new_data[select_var].mean())
+            t_mean = 'Average ' + select_var + ': ' + str(new_data.loc[:,select_var].mean())
         except TypeError:
             t_mean = ''
 
@@ -395,6 +437,9 @@ def plot_evar(dataset, select_var, start_date, end_date):
         except TypeError:
             table_data = new_data.to_dict()
 
+    if 'depth' in select_var.lower():
+
+        efig['layout']['yaxis']['autorange'] = "reversed"
 
     efig.update_layout(
         plot_bgcolor=colors['background'],
