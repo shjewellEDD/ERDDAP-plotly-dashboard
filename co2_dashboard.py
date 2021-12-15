@@ -1,11 +1,4 @@
 '''
-TODO:
-    Select date range
-    Group and select data by SN
-        Maybe Instrument state as well?
-
-    Improve style sheet
-
 Data layout
 {0: 'latitude',
 1: 'longitude',
@@ -108,6 +101,20 @@ Data layout
 98: 'O2_SAT_SBE37_STDDEV',
 99: 'CHLOR_WETLABS_MEAN',
 100: 'CHLOR_WETLABS_STDDEV'}
+
+TODO:
+    Select date range
+    Group and select data by SN
+        Maybe Instrument state as well?
+
+    Improve Style sheet
+        Seperate out data and flags
+
+    Improve style sheet
+
+    Improve Plotting
+        Break up each data chunk (eg O2_CONC) and give a seperate plot to Real, MEAN and STDDEV
+
 '''
 
 import dash
@@ -123,7 +130,7 @@ import pandas as pd
 from lxml import html
 import datetime
 from datetime import date
-#import requests
+import requests
 import io
 import urllib
 
@@ -167,8 +174,10 @@ class Dataset:
 
     def __init__(self, url, window_start=False, window_end=False):
         self.url = url
+        self.flags = pd.DataFrame
         self.data, self.vars = self.get_data()
         self.t_start, self.t_end = self.data_dates()
+        self.set_names, self.flags = self.catagorize
 
     #opens metadata page and returns start and end datestamps
     def data_dates(self):
@@ -177,20 +186,27 @@ class Dataset:
         Let's actually use hard coded dates. We may need to fix
         :return:
         '''
-        # page = (requests.get(self.url[:-3] + "das")).text
-        #
-        # indx = page.find('Float64 actual_range')
-        # mdx = page.find(',', indx)
-        # endx = page.find(";", mdx)
+        page = (requests.get(self.url[:-3] + "das")).text
+
+        indx = page.find('Float64 actual_range')
+        mdx = page.find(',', indx)
+        endx = page.find(";", mdx)
         # start_time = datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx]))
         # end_time = datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx]))
-        #
-        # #prevents dashboard from trying to read data from ... THE FUTURE!
+
+        #prevents dashboard from trying to read data from ... THE FUTURE!
         # if end_time > datetime.datetime.now():
         #     end_time = datetime.datetime.now()
 
-        start_time = self.data['time'].min()
-        end_time = self.data['time'].max()
+        if self.data['time'].min() < datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx])):
+            start_time = datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx]))
+        else:
+            start_time = self.data['time'].min()
+
+        if self.data['time'].max() > datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx])):
+            end_time = self.data['time'].max()
+        else:
+            end_time = datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx]))
 
         return start_time, end_time
 
@@ -202,14 +218,20 @@ class Dataset:
         #self.serials = (self.data['SN_ASVCO2'].unique()).tolist()
         #self.data = self.data.select_dtypes(include='float64')
         self.data['time'] = temp
+        self.flags.assign(temp)
 
         dat_vars = self.data.columns
+
 
         # for set in list(data.keys()):
         self.vars = []
         for var in list(dat_vars):
             if var in skipvars:
                 continue
+
+            if 'FLAG' in var:
+                self.flags.assign(self.data[var])
+                #self.data.drop(self.data[var], axis='columns')
 
             if str(self.data[var].dtype) == 'object':
                 continue
@@ -218,6 +240,42 @@ class Dataset:
 
 
         return self.data, self.vars
+
+
+    def catagorize(self):
+
+        sets = set()
+        flags = pd.DataFrame
+        base_sets = {}
+
+        subsets = {0:   '_MEAN',
+                   1:   '_STDDEV',
+                   2:   '_MAX',
+                   3:   '_MIN'
+                   }
+
+        for col in self.data.columns:
+
+            for n in subsets:
+
+                if "FLAG" in col:
+
+                    flags.assign(self.data[col])
+                    continue
+
+                elif subsets[n] in col:
+
+                    sets.add(col.replace(subsets[n], ''))
+
+                    try:
+                        base_sets[col.replace(subsets[n], '')][subsets[n]] = col
+                    except KeyError:
+                        base_sets[col.replace(subsets[n], '')] = {subsets[n]: col}
+
+
+                    continue
+
+        return base_sets, flags
 
     def ret_data(self, **kwargs):
 
@@ -257,11 +315,11 @@ app = dash.Dash(__name__)
 
 app.layout = ddk.App([
     ddk.Header([
-        ddk.Logo(src=app.get_asset_url('logo.png'), style={
-            'max-height': 100,
-            'width': 'auto'
-        }),
-        ddk.Title('Prawler Engineering Diagnostic Dashboard'),
+        # ddk.Logo(src=app.get_asset_url('logo.png'), style={
+        #     'max-height': 100,
+        #     'width': 'auto'
+        # }),
+        ddk.Title('ASVCO2 Reporting'),
         ddk.SectionTitle('', id='final_date'),
         dhtml.Button('Refresh', style={'float': 'right'}, id='refresh', n_clicks=0),
     ]),
@@ -269,35 +327,42 @@ dhtml.Div(style={'backgroundColor': colors['background']},
           children=[
     dhtml.Div(style={'backgroundColor': colors['background']},
               children=[
-        ddk.Card(style={'backgroundColor': colors['background']},
-                 children=[dcc.Loading(id='load_loader',
+        ddk.Card(width=75,
+                 style={'backgroundColor': colors['background']},
+                 children=[dcc.Loading(id='graph_car',
                                  children=[ddk.Graph(id='eng-graphic')]
-                                       ),
-                            dcc.DatePickerRange(
-                                id='date-picker',
-                                style={'backgroundColor': colors['background']},
-                                min_date_allowed=dataset.t_start,
-                                max_date_allowed=dataset.t_end,
-                                start_date=dataset.t_end - datetime.timedelta(days=14),
-                                end_date=dataset.t_end
-                            ),
-                            dhtml.Label(['Select X']),
-                            dcc.Dropdown(
-                                id="select_x",
-                                style={'backgroundColor': colors['background']},
-                                options=dataset.ret_vars(),
-                                value='time',
-                                clearable=False
-                            ),
-                            dhtml.Label(['Select Y']),
-                            dcc.Dropdown(
-                                id="select_y",
-                                style={'backgroundColor': colors['background'],
-                                       'textColor': colors['text']},
-                                options=dataset.ret_vars(),
-                                value=dataset.ret_vars()[1]['value'],
-                                clearable=False
-                            ),
+                                       )
+                           ]
+                 ),
+      # dhtml.Div(style={'backgroundColor': colors['background']},
+      #          children=[
+        ddk.Card(width=25,
+                style={'backgroundColor': colors['background']},
+               children=[dcc.DatePickerRange(
+                    id='date-picker',
+                    style={'backgroundColor': colors['background']},
+                    min_date_allowed=dataset.t_start,
+                    max_date_allowed=dataset.t_end,
+                    start_date=dataset.t_end - datetime.timedelta(days=14),
+                    end_date=dataset.t_end
+                ),
+                dhtml.Label(['Select X']),
+                dcc.Dropdown(
+                    id="select_x",
+                    style={'backgroundColor': colors['background']},
+                    options=dataset.ret_vars(),
+                    value='time',
+                    clearable=False
+                ),
+                dhtml.Label(['Select Y']),
+                dcc.Dropdown(
+                    id="select_y",
+                    style={'backgroundColor': colors['background'],
+                           'textColor': colors['text']},
+                    options=dataset.ret_vars(),
+                    value=dataset.ret_vars()[1]['value'],
+                    clearable=False
+                ),
                 ],
             ),
     ]),
@@ -355,7 +420,7 @@ def plot_evar(x_set, y_set, t_start, t_end):
     data[x_set].dropna()
     data[y_set].dropna()
 
-    efig = px.scatter(data, y=y_set, x=x_set)
+    efig = px.scatter(data, y=y_set, x=x_set)#, color="sepal_length", color_continuous_scale='oxy')
 
     efig.update_layout(
         plot_bgcolor=colors['background'],
