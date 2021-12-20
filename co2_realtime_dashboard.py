@@ -1,106 +1,4 @@
 '''
-Data layout
-{0: 'latitude',
-1: 'longitude',
-2: 'time',
-3: 'trajectory',
-4: 'SOG',
-5: 'SOG_FILTERED_MEAN',
-6: 'SOG_FILTERED_STDDEV',
-7: 'SOG_FILTERED_MAX',
-8: 'SOG_FILTERED_MIN',
-9: 'COG',
-10: 'COG_FILTERED_MEAN',
-11: 'COG_FILTERED_STDDEV',
-12: 'HDG',
-13: 'HDG_FILTERED_MEAN',
-14: 'HDG_FILTERED_STDDEV',
-15: 'ROLL_FILTERED_MEAN',
-16: 'ROLL_FILTERED_STDDEV',
-17: 'ROLL_FILTERED_PEAK',
-18: 'PITCH_FILTERED_MEAN',
-19: 'PITCH_FILTERED_STDDEV',
-20: 'PITCH_FILTERED_PEAK',
-21: 'HDG_WING',
-22: 'WING_HDG_FILTERED_MEAN',
-23: 'WING_HDG_FILTERED_STDDEV',
-24: 'WING_ROLL_FILTERED_MEAN',
-25: 'WING_ROLL_FILTERED_STDDEV',
-26: 'WING_ROLL_FILTERED_PEAK',
-27: 'WING_PITCH_FILTERED_MEAN',
-28: 'WING_PITCH_FILTERED_STDDEV',
-29: 'WING_PITCH_FILTERED_PEAK',
-30: 'WING_ANGLE',
-31: 'WIND_FROM_MEAN',
-32: 'WIND_FROM_STDDEV',
-33: 'WIND_SPEED_MEAN',
-34: 'WIND_SPEED_STDDEV',
-35: 'UWND_MEAN',
-36: 'UWND_STDDEV',
-37: 'VWND_MEAN',
-38: 'VWND_STDDEV',
-39: 'WWND_MEAN',
-40: 'WWND_STDDEV',
-41: 'GUST_WND_MEAN',
-42: 'GUST_WND_STDDEV',
-43: 'WIND_MEASUREMENT_HEIGHT_MEAN',
-44: 'WIND_MEASUREMENT_HEIGHT_STDDEV',
-45: 'TEMP_AIR_MEAN',
-46: 'TEMP_AIR_STDDEV',
-47: 'RH_MEAN',
-48: 'RH_STDDEV',
-49: 'BARO_PRES_MEAN',
-50: 'BARO_PRES_STDDEV',
-51: 'PAR_AIR_MEAN',
-52: 'PAR_AIR_STDDEV',
-53: 'TEMP_IR_SEA_WING_UNCOMP_MEAN',
-54: 'TEMP_IR_SEA_WING_UNCOMP_STDDEV',
-55: 'INSTRUMENT_STATE',
-56: 'ASVCO2_GENERAL_ERROR_FLAGS',
-57: 'ASVCO2_ZERO_ERROR_FLAGS',
-58: 'ASVCO2_SPAN_ERROR_FLAGS',
-59: 'ASVCO2_SECONDARYSPAN_ERROR_FLAGS',
-60: 'ASVCO2_EQUILIBRATEANDAIR_ERROR_FLAGS',
-61: 'ASVCO2_RTC_ERROR_FLAGS',
-62: 'ASVCO2_FLOWCONTROLLER_FLAGS',
-63: 'ASVCO2_LICOR_FLAGS',
-64: 'CO2DETECTOR_TEMP_MEAN_ASVCO2',
-65: 'CO2DETECTOR_TEMP_STDDEV_ASVCO2',
-66: 'CO2DETECTOR_PRESS_UNCOMP_STDDEV_ASVCO2',
-67: 'CO2DETECTOR_PRESS_MEAN_ASVCO2',
-68: 'CO2_MEAN_ASVCO2',
-69: 'CO2_STDDEV_ASVCO2',
-70: 'RH_MEAN_ASVCO2',
-71: 'RH_STDDEV_ASVCO2',
-72: 'RH_TEMP_MEAN_ASVCO2',
-73: 'RH_TEMP_STDDEV_ASVCO2',
-74: 'CO2DETECTOR_RAWSAMPLE_MEAN_ASVCO2',
-75: 'CO2DETECTOR_RAWSAMPLE_STDDEV_ASVCO2',
-76: 'CO2DETECTOR_RAWREFERENCE_MEAN_ASVCO2',
-77: 'CO2DETECTOR_RAWREFERENCE_STDDEV_ASVCO2',
-78: 'O2_MEAN_ASVCO2',
-79: 'O2_STDDEV_ASVCO2',
-80: 'XCO2_DRY_SW_MEAN_ASVCO2',
-81: 'XCO2_DRY_AIR_MEAN_ASVCO2',
-82: 'CO2DETECTOR_ZERO_COEFFICIENT_ASVCO2',
-83: 'CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2',
-84: 'CO2DETECTOR_SECONDARY_COEFFICIENT_ASVCO2',
-85: 'WAVE_DOMINANT_PERIOD',
-86: 'WAVE_SIGNIFICANT_HEIGHT',
-87: 'TEMP_DEPTH_HALFMETER_MEAN',
-88: 'TEMP_DEPTH_HALFMETER_STDDEV',
-89: 'TEMP_SBE37_MEAN',
-90: 'TEMP_SBE37_STDDEV',
-91: 'SAL_SBE37_MEAN',
-92: 'SAL_SBE37_STDDEV',
-93: 'COND_SBE37_MEAN',
-94: 'COND_SBE37_STDDEV',
-95: 'O2_CONC_SBE37_MEAN',
-96: 'O2_CONC_SBE37_STDDEV',
-97: 'O2_SAT_SBE37_MEAN',
-98: 'O2_SAT_SBE37_STDDEV',
-99: 'CHLOR_WETLABS_MEAN',
-100: 'CHLOR_WETLABS_STDDEV'}
 
 TODO:
     Select date range
@@ -130,6 +28,7 @@ from dash.dependencies import Input, Output
 import dash_table
 import plotly.express as px
 import plotly.graph_objects as go
+from plotly.subplots  import make_subplots
 import dash_html_components as dhtml
 
 #non-plotly imports
@@ -253,17 +152,17 @@ class Dataset:
     def co2_custom_data(self):
 
         sets = [{'label': 'XCO2 Mean',      'value': 'co2_raw'},
-                {'label': 'XCO2 Residuals', 'value': 'co2_res'},
-                {'label': 'XCO2 Delta',     'value': 'co2_delt'},
-                {'label': 'CO2 Pres. Mean', 'value': 'co2_det_state'},
-                {'label': 'CO2 Mean',       'value': 'co2_mean_zp'},
-                {'label': 'CO2 Mean SP',    'value': 'co2_mean_sp'},
-                {'label': 'CO2 Span & Temp','value': 'co2_span_temp'},
-                {'label': 'CO2 Zero Temp',  'value': 'co2_zero_temp'},
-                {'label': 'CO2 STDDEV',     'value': 'co2_stddev'},
-                {'label': 'O2 Mean',        'value': 'o2_mean'},
-                {'label': 'CO2 Span',       'value': 'co2_span'},
-                {'label': 'CO2 Zero',       'value': 'co2_zero'}
+                # {'label': 'XCO2 Residuals', 'value': 'co2_res'},
+                # {'label': 'XCO2 Delta',     'value': 'co2_delt'},
+                # {'label': 'CO2 Pres. Mean', 'value': 'co2_det_state'},
+                # {'label': 'CO2 Mean',       'value': 'co2_mean_zp'},
+                # {'label': 'CO2 Mean SP',    'value': 'co2_mean_sp'},
+                # {'label': 'CO2 Span & Temp','value': 'co2_span_temp'},
+                # {'label': 'CO2 Zero Temp',  'value': 'co2_zero_temp'},
+                # {'label': 'CO2 STDDEV',     'value': 'co2_stddev'},
+                # {'label': 'O2 Mean',        'value': 'o2_mean'},
+                # {'label': 'CO2 Span',       'value': 'co2_span'},
+                # {'label': 'CO2 Zero',       'value': 'co2_zero'}
         ]
 
         return sets
@@ -362,10 +261,7 @@ dhtml.Div(style={'backgroundColor': colors['background']},
         ddk.Card(width=75,
                  style={'backgroundColor': colors['background']},
                  children=[dcc.Loading(id='graph_car',
-                                 children=[ddk.Graph(id='primary-graphic')#,
-                                           #ddk.Graph(id='graphic-2'),
-                                           #ddk.Graph(id='graphic-3')
-                                            ]
+                                 children=[ddk.Graph(id='graphs', config=graph_config)]
                                        )
                            ]
                  ),
@@ -381,55 +277,17 @@ dhtml.Div(style={'backgroundColor': colors['background']},
                     start_date=dataset.t_end - datetime.timedelta(days=14),
                     end_date=dataset.t_end
                 ),
-                dhtml.Label(['Select X']),
+                dhtml.Label(['Select Set']),
                 dcc.Dropdown(
                     id="select_x",
                     style={'backgroundColor': colors['background']},
                     options=dataset.co2_custom_data(),
                     value=dataset.co2_custom_data()[0]['value'],
                     clearable=False
-                ),
-                # dhtml.Label(['Select Y']),
-                # dcc.Dropdown(
-                #     id="select_y",
-                #     style={'backgroundColor': colors['background'],
-                #            'textColor': colors['text']},
-                #     options=dataset.ret_vars(),
-                #     value=dataset.ret_vars()[1]['value'],
-                #     clearable=False
-                # )
-                ],
-            ),
-    ]),
-    # ddk.Card(children=[
-    #     ddk.Block(width=6, children=
-    #     [
-    #         dhtml.Img(src='https://www.pmel.noaa.gov/sites/default/files/PMEL-meatball-logo-sm.png', height=100,
-    #                  width=100),
-    #
-    #     ]),
-    #     ddk.Block(width=90, children=[
-    #         dhtml.Div(children=[
-    #             dcc.Link('National Oceanic and Atmospheric Administration', href='https://www.noaa.gov/'),
-    #         ]),
-    #         dhtml.Div(children=[
-    #             dcc.Link('Pacific Marine Environmental Laboratory  |', href='https://www.pmel.noaa.gov/'),
-    #             dcc.Link('  Engineering', href='https://www.pmel.noaa.gov/edd/')
-    #         ]),
-    #         dhtml.Div(children=[
-    #             dcc.Link('oar.pmel.edd-webmaster@noaa.gov', href='mailto:oar.pmel.edd-webmaster@noaa.gov')
-    #         ]),
-    #         dhtml.Div(children=[
-    #             dcc.Link('DOC |', href='https://www.commerce.gov/'),
-    #             dcc.Link(' NOAA |', href='https://www.noaa.gov/'),
-    #             dcc.Link(' OAR |', href='https://www.research.noaa.gov/'),
-    #             dcc.Link(' PMEL |', href='https://www.pmel.noaa.gov/'),
-    #             dcc.Link(' Privacy Policy |', href='https://www.noaa.gov/disclaimer'),
-    #             dcc.Link(' Disclaimer |', href='https://www.noaa.gov/disclaimer'),
-    #             dcc.Link(' Accessibility', href='https://www.pmel.noaa.gov/accessibility')
-    #         ])
-    #     ])
-    # ])
+                )
+                ]
+            )
+    ])
 ])
 
 ])
@@ -441,7 +299,7 @@ Callbacks
 
 #engineering data selection
 @app.callback(
-    Output('primary-graphic', 'figure'),
+    Output('graphs', 'figure'),
     [Input('select_x', 'value'),
      Input('date-picker', 'start_date'),
      Input('date-picker', 'end_date')
@@ -449,13 +307,75 @@ Callbacks
 
 def plot_evar(selection, t_start, t_end):
 
-    def co2_raw():
+    def co2_raw(df):
         '''
         'co2_raw'
             Primary: XCO2_DRY_SW_MEAN_ASVCO2 & XCO2_DRY_AIR_MEAN_ASVCO2
             Secondary: SSS and SST
         '''
 
+        # for instr in states:
+
+        # df['XCO2_DRY_SW_MEAN_ASVCO2'].dropna()
+        # df['XCO2_DRY_AIR_MEAN_ASVCO2'].dropna()
+        # df['SAL_SBE37_MEAN'].dropna()
+        # df['time'].dropna()
+
+        sw = go.Scatter(x=df['time'], y=df['XCO2_DRY_SW_MEAN_ASVCO2'].dropna(), name='Seawater CO2', hoverinfo='x+y+name')
+        air = go.Scatter(x=df['time'], y=df['XCO2_DRY_AIR_MEAN_ASVCO2'].dropna(), name='CO2 Air', hoverinfo='x+y+name')
+        sss = go.Scatter(x=df['time'], y=df['SAL_SBE37_MEAN'].dropna(), name='SSS', hoverinfo='x+y+name')
+        sst = go.Scatter(x=df['time'], y=df['TEMP_SBE37_MEAN'].dropna(), name='SST', hoverinfo='x+y+name')
+
+        load_plots = make_subplots(rows=3, cols=1, shared_xaxes='all',
+                                   subplot_titles=("XCO2 DRY", "SSS", "SST"),
+                                   shared_yaxes=False, vertical_spacing=0.1)
+
+        load_plots.append_trace(sw, row=1, col=1)
+        load_plots.add_trace(air, row=1, col=1)
+        load_plots.append_trace(sss, row=2, col=1)
+        load_plots.append_trace(sst, row=3, col=1)
+
+
+        load_plots['layout'].update(height=900,
+                                    title=' ',
+                                    hovermode='x unified',
+                                    xaxis_showticklabels=True,
+                                    xaxis2_showticklabels=True, xaxis3_showticklabels=True,
+                                    yaxis_fixedrange=True,
+                                    yaxis2_fixedrange=True, yaxis3_fixedrange=True,
+                                    yaxis_title='Dry CO2',
+                                    yaxis2_title='Salinity', yaxis3_title='SW Temp',
+                                    showlegend=False, modebar={'orientation': 'h'}, autosize=True)
+
+        return load_plots
+
+    def co2_res(data):
+        '''
+        'co2_res'
+            Primary: Calculate residual of XCO2_DRY_SW_MEAN_ASVCO2 & XCO2_DRY_AIR_MEAN_ASVCO2
+            Secondary: O2_SAT_SBE37_MEAN and/or O2_MEAN_ASVCO2
+            '''
+        fig = go.Figure()
+
+        # for instr in states:
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
+
+    def co2_delt(data):
+        '''
+        'co2_delt'
+            Primary: calculated pressure differentials between like states
+        '''
         fig = go.Figure()
 
         # for instr in states:
@@ -464,37 +384,36 @@ def plot_evar(selection, t_start, t_end):
         data['time'].dropna()
 
         fig = px.scatter(data,
-                          y='WIND_FROM_MEAN',
-                          x='time',
-                          color='INSTRUMENT_STATE',
-                          symbol='INSTRUMENT_STATE')
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
 
         sec = go.Figure()
 
-
-        return {1: fig}
-
-    def co2_res(data):
-        '''
-        'co2_res'
-            Primary: Calculate residual of XCO2_DRY_SW_MEAN_ASVCO2 & XCO2_DRY_AIR_MEAN_ASVCO2
-            Secondary: O2_SAT_SBE37_MEAN and/or O2_MEAN_ASVCO2
-            '''
-        pass
-
-    def co2_delt(data):
-        '''
-        'co2_delt'
-            Primary: calculated pressure differentials between like states
-        '''
-        pass
+        return fig
 
     def co2_det_state(data):
         '''
         'co2_det_state'
             Primary: CO2DETECTOR_PRESS_MEAN_ASVCO2 for each state
         '''
-        pass
+        fig = go.Figure()
+
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
 
     def co2_mean_zp(data):
         '''
@@ -502,7 +421,22 @@ def plot_evar(selection, t_start, t_end):
             Primary: CO2_MEAN_ASVCO2 for ZPON, ZPOFF and ZPPCAL
             Secondary: CO2DETECTOR_TEMP_MEAN_ASVCO2 for ZPOFF
         '''
-        pass
+        fig = go.Figure()
+
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
 
     def co2_mean_sp(data):
         '''
@@ -510,35 +444,110 @@ def plot_evar(selection, t_start, t_end):
             Primary: CO2_MEAN_ASVCO2 for SPON, SPOFF, SPPCAL
             Secondary: CO2_MEAN_ASVCO2 SPOFF
         '''
-        pass
+        fig = go.Figure()
+
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
 
     def co2_span_temp(data):
         '''
         'co2_span_temp'
             Primary: CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2 vs. SPOFF CO2DETECTOR_TEMP_MEAN_ASVCO2
         '''
-        pass
+        fig = go.Figure()
+
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
 
     def co2_zero_temp(data):
         '''
         'co2_zero_temp'
             Primary: CO2DETECTOR_ZERO_COEFFICIENT_ASVCO2 vs. ZPOFF CO2DETECTOR_TEMP_MEAN_ASVCO2
         '''
-        pass
+        fig = go.Figure()
+
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
 
     def co2_stddev(data):
         '''
         'co2_stddev'
             Primary: CO2_STDDEV_ASVCO2
         '''
-        pass
+        fig = go.Figure()
+
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
 
     def o2_mean(data):
         '''
         'o2_mean'
             Primary: O2_MEAN_ASVCO2 for APOFF and EPOFF
         '''
-        pass
+        fig = go.Figure()
+
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
 
     def co2_span(data):
         '''
@@ -546,7 +555,22 @@ def plot_evar(selection, t_start, t_end):
             Primary: CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2
             Secondary: CO2DETECTOR_TEMP_MEAN_ASVCO2 for SPOFF
         '''
-        pass
+        fig = go.Figure()
+
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
 
     def co2_zero(data):
         '''
@@ -554,44 +578,58 @@ def plot_evar(selection, t_start, t_end):
             Primary: CO2DETECTOR_ZERO_COEFFICIENT_ASVCO2
             Secondary: CO2DETECTOR_TEMP_MEAN_ASVCO2 for ZPOFF
         '''
-        pass
+        fig = go.Figure()
 
-    def switch_plot(case):
-        return {'co2_raw':      co2_raw,
-        'co2_res':          co2_res,
-        'co2_delt':         co2_delt,
-        'co2_det_state':    co2_det_state,
-        'co2_mean_zp':      co2_mean_zp,
-        'co2_mean_sp':      co2_mean_sp,
-        'co2_span_temp':    co2_span_temp,
-        'co2_zero_temp':    co2_zero_temp,
-        'co2_stddev':       co2_stddev,
-        'o2_mean':          o2_mean,
-        'co2_span':         co2_span,
-        'co2_zero':         co2_zero
+        # for instr in states:
+
+        data['WIND_FROM_MEAN'].dropna()
+        data['time'].dropna()
+
+        fig = px.scatter(data,
+                         y='WIND_FROM_MEAN',
+                         x='time',
+                         color='INSTRUMENT_STATE',
+                         symbol='INSTRUMENT_STATE')
+
+        sec = go.Figure()
+
+        return {1: fig}
+
+    def switch_plot(case, data):
+        return {'co2_raw':      co2_raw(data),
+        'co2_res':          co2_res(data),
+        'co2_delt':         co2_delt(data),
+        'co2_det_state':    co2_det_state(data),
+        'co2_mean_zp':      co2_mean_zp(data),
+        'co2_mean_sp':      co2_mean_sp(data),
+        'co2_span_temp':    co2_span_temp(data),
+        'co2_zero_temp':    co2_zero_temp(data),
+        'co2_stddev':       co2_stddev(data),
+        'o2_mean':          o2_mean(data),
+        'co2_span':         co2_span(data),
+        'co2_zero':         co2_zero(data)
         }.get(case)
 
     states = ['ZPON', 'ZPOFF', 'ZPPCAL', 'SPON', 'SPOFF', 'SPPCAL', 'EPON', 'EPOFF', 'APON', 'APOFF']
 
     data = dataset.ret_data(t_start=t_start, t_end=t_end)
 
-    plotters = switch_plot(selection)
+    plotters = switch_plot(selection, data)
 
-    pri_fig = plotters[1]
+    #pri_fig = plotters[1]
     #sec_fig = plotters[2]
     #ter_fig = plotters[3]
-
 
     #efig = px.scatter(data, y=y_set, x=x_set)#, color="sepal_length", color_continuous_scale='oxy')
 
 
-    # pri_fig.update_layout(
-    #     plot_bgcolor=colors['background'],
-    #     paper_bgcolor=colors['background'],
-    #     font_color=colors['text']
-    # )
+    plotters.update_layout(
+        plot_bgcolor=colors['background'],
+        paper_bgcolor=colors['background'],
+        font_color=colors['text']
+    )
 
-    return pri_fig
+    return plotters
 
 if __name__ == '__main__':
     #app.run_server(host='0.0.0.0', port=8050, debug=True)
