@@ -465,11 +465,11 @@ def plot_evar(dataset, select_var, start_date, end_date):
 
         efig['layout']['yaxis']['autorange'] = "reversed"
 
-    # efig.update_layout(
-    #     plot_bgcolor=colors['background'],
-    #     paper_bgcolor=colors['background'],
-    #     font_color=colors['text']
-    # )
+    efig.update_layout(
+        plot_bgcolor=colors['background'],
+        paper_bgcolor=colors['background'],
+        font_color=colors['text']
+    )
 
     return efig, table_data, columns, t_mean
 
