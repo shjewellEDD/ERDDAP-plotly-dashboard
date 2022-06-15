@@ -1,295 +1,112 @@
 '''
-
-TODO:
-    Select date range
-    Group and select data by SN
-        Maybe Instrument state as well?
-
-    Improve Style sheet
-        Seperate out data and flags
-
-    Improve style sheet
-
-    Improve Plotting
-        Break up each data chunk (eg O2_CONC) and give a seperate plot to Real, MEAN and STDDEV
-
-    Statistics
-        Make options for choosing residual calculation:
-            Remainder
-            Mean
-            Least Squares
-
-'''
-
-import dash
-import dash_design_kit as ddk  # Only available on Dash Enterprise
-import dash_core_components as dcc
-from dash.dependencies import Input, Output
-import dash_table
-import plotly.express as px
-import plotly.graph_objects as go
-from plotly.subplots  import make_subplots
-import dash_html_components as dhtml
-
-#non-plotly imports
-import pandas as pd
-from lxml import html
-import datetime
-from datetime import date
-import requests
-import io
-import urllib
-
-skipvars = ['latitude', 'longitude']
-# will need to be altered for multi-set displays
-
-# ======================================================================================================================
-# helpful functions
-
-# generates ERDDAP compatable date
-def gen_erddap_date(edate):
-    erdate = (str(edate.year) + "-"
-              + str(edate.month).zfill(2) + '-'
-              + str(edate.day).zfill(2) + "T"
-              + str(edate.hour).zfill(2) + ":"
-              + str(edate.minute).zfill(2) + ":"
-              + str(edate.second).zfill(2) + "Z")
-
-    return erdate
-
-
-# generates datetime.datetime object from ERDDAP compatable date
-def from_erddap_date(edate):
-    redate = datetime.datetime(year=int(edate[:4]),
-                               month=int(edate[5:7]),
-                               day=int(edate[8:10]),
-                               hour=int(edate[11:13]),
-                               minute=int(edate[14:16]),
-                               second=int(edate[17:19]))
-
-    return redate
-
-''' class used for holding useful information about the ERDDAP databases
-========================================================================================================================
-'''
-
-class Dataset:
-    #dataset object,
-    #it takes requested data and generates windows and corresponding urls
-    #logger.info('New dataset initializing')
-
-    def __init__(self, url, window_start=False, window_end=False):
-        self.url = url
-        self.flags = pd.DataFrame
-        self.data, self.vars = self.get_data()
-        self.t_start, self.t_end = self.data_dates()
-        self.set_names, self.flags = self.catagorize()
-
-        #self.co2_vars
-
-    #opens metadata page and returns start and end datestamps
-    def data_dates(self):
-        '''
-        Currently the meta data states a start in 1969, which seems unrealistic
-        Let's actually use hard coded dates. We may need to fix
-        :return:
-        '''
-        page = (requests.get(self.url[:-3] + "das")).text
-
-        indx = page.find('Float64 actual_range')
-        mdx = page.find(',', indx)
-        endx = page.find(";", mdx)
-        # start_time = datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx]))
-        # end_time = datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx]))
-
-        #prevents dashboard from trying to read data from ... THE FUTURE!
-        # if end_time > datetime.datetime.now():
-        #     end_time = datetime.datetime.now()
-
-        if self.data['time'].min() < datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx])):
-            start_time = datetime.datetime.utcfromtimestamp(float(page[(indx + 21):mdx]))
-        else:
-            start_time = self.data['time'].min()
-
-        if self.data['time'].max() > datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx])):
-            end_time = self.data['time'].max()
-        else:
-            end_time = datetime.datetime.utcfromtimestamp(float(page[(mdx + 2):endx]))
-
-        return start_time, end_time
-
-
-    def get_data(self):
-
-        self.data = pd.read_csv(self.url, skiprows=[1], low_memory=False)
-        temp = self.data['time'].apply(from_erddap_date)
-        #self.serials = (self.data['SN_ASVCO2'].unique()).tolist()
-        #self.data = self.data.select_dtypes(include='float64')
-        self.data['time'] = temp
-        self.flags.assign(temp)
-
-        dat_vars = self.data.columns
-
-
-        # for set in list(data.keys()):
-        self.vars = []
-        for var in list(dat_vars):
-            # if var in skipvars:
-            #     continue
-
-            if 'FLAG' in var:
-                self.flags.assign(self.data[var])
-                #self.data.drop(self.data[var], axis='columns')
-
-            if str(self.data[var].dtype) == 'object':
-                continue
-
-            self.vars.append({'label': var, 'value': var})
-
-
-        return self.data, self.vars
-
-    def co2_custom_data(self):
-
-        sets = [{'label': 'XCO2 Mean',      'value': 'co2_raw'},
-                # {'label': 'XCO2 Residuals', 'value': 'co2_res'},
-                # {'label': 'XCO2 Delta',     'value': 'co2_delt'},
-                # {'label': 'CO2 Pres. Mean', 'value': 'co2_det_state'},
-                # {'label': 'CO2 Mean',       'value': 'co2_mean_zp'},
-                # {'label': 'CO2 Mean SP',    'value': 'co2_mean_sp'},
-                # {'label': 'CO2 Span & Temp','value': 'co2_span_temp'},
-                # {'label': 'CO2 Zero Temp',  'value': 'co2_zero_temp'},
-                # {'label': 'CO2 STDDEV',     'value': 'co2_stddev'},
-                # {'label': 'O2 Mean',        'value': 'o2_mean'},
-                # {'label': 'CO2 Span',       'value': 'co2_span'},
-                # {'label': 'CO2 Zero',       'value': 'co2_zero'}
-        ]
-
-        return sets
-
-
-    def catagorize(self):
-
-        sets = set()
-        flags = pd.DataFrame
-        base_sets = {}
-
-        subsets = {0:   '_MEAN',
-                   1:   '_STDDEV',
-                   2:   '_MAX',
-                   3:   '_MIN'
-                   }
-
-        for col in self.data.columns:
-
-            for n in subsets:
-
-                if "FLAG" in col:
-
-                    flags.assign(self.data[col])
-                    continue
-
-                elif subsets[n] in col:
-
-                    sets.add(col.replace(subsets[n], ''))
-
-                    try:
-                        base_sets[col.replace(subsets[n], '')][subsets[n]] = col
-                    except KeyError:
-                        base_sets[col.replace(subsets[n], '')] = {subsets[n]: col}
-
-
-                    continue
-
-            #drop_list =
-
-        return base_sets, flags
-
-    def ret_data(self, **kwargs):
-
-        w_start = kwargs.get('t_start', self.t_start)
-        w_end = kwargs.get('t_end', self.t_end)
-
-        #self.data['datetime'] = self.data.loc[:, 'time'].apply(from_erddap_date)
-
-        return self.data[(w_start <= self.data['time']) & (self.data['time'] <= w_end)]
-
-    def ret_vars(self):
-
-        return self.vars
-
-
-
-
-'''
 ========================================================================================================================
 Start Dashboard
 '''
 
-set_url = 'http://dunkel.pmel.noaa.gov:9290/erddap/tabledap/asvco2_gas_validation_all_fixed_station_mirror.csv'
-rt_url = 'https://data.pmel.noaa.gov/generic/erddap/tabledap/sd_shakedown_collection.csv'
+import datetime
+import pandas as pd
+
+import dash
+from dash import dcc, dash_table
+import dash_bootstrap_components as dbc
+from dash.dependencies import Input, Output, State
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from dash import html as dhtml
+
+import data_import
+
+rt_url1 = 'https://data.pmel.noaa.gov/generic/erddap/tabledap/sd_shakedown_collection.csv'
+rt_url2 = 'https://dunkel.pmel.noaa.gov:9290/erddap/tabledap/sd1067_2021_post_mission.csv'
+rt_url3 = 'https://dunkel.pmel.noaa.gov:9290/erddap/tabledap/sd1030_2021_post_mission.csv'
+url4 = 'https://dunkel.pmel.noaa.gov:9290/erddap/tabledap/sd1091_ecmwf_2021.csv'
+url5 = 'https://dunkel.pmel.noaa.gov:9290/erddap/tabledap/sd1089_ecmwf_2021.csv'
 set_loc = 'D:\Data\CO2 Sensor tests\\asvco2_gas_validation_all_fixed_station_mirror.csv'
 
-dataset = Dataset(rt_url)
+available_sets = [{'label': 'SD Shakedown',   'value': 'https://data.pmel.noaa.gov/generic/erddap/tabledap/sd_shakedown_collection.csv'},
+        {'label': 'SD 1067',        'value': 'https://dunkel.pmel.noaa.gov:9290/erddap/tabledap/sd1067_2021_post_mission.csv'},
+        {'label': 'SD 1030',        'value': 'https://dunkel.pmel.noaa.gov:9290/erddap/tabledap/sd1030_2021_post_mission.csv'},
+        {'label': 'SD 1091 ECMWF',  'value': 'https://dunkel.pmel.noaa.gov:9290/erddap/tabledap/sd1091_ecmwf_2021.csv'},
+        {'label': 'SD 1089 ECMWF',  'value': 'https://dunkel.pmel.noaa.gov:9290/erddap/tabledap/sd1089_ecmwf_2021.csv'}]
+
+custom_sets = [{'label': 'XCO2 Mean', 'value': 'co2_raw'},
+        {'label': 'XCO2 Residuals', 'value': 'co2_res'},
+        {'label': 'XCO2 Delta', 'value': 'co2_delt'},
+        {'label': 'CO2 Pres. Mean', 'value': 'co2_det_state'},
+        {'label': 'CO2 Mean', 'value': 'co2_mean_zp'},
+        {'label': 'CO2 Mean SP', 'value': 'co2_mean_sp'},
+        {'label': 'CO2 Span & Temp', 'value': 'co2_span_temp'},
+        {'label': 'CO2 Zero Temp', 'value': 'co2_zero_temp'},
+        {'label': 'CO2 STDDEV', 'value': 'co2_stddev'},
+        {'label': 'O2 Mean', 'value': 'o2_mean'},
+        {'label': 'CO2 Span', 'value': 'co2_span'},
+        {'label': 'CO2 Zero', 'value': 'co2_zero'},
+        {'label': 'Pres Difference', 'value': 'pres_state'}
+        ]
+
+dataset = data_import.Dataset(rt_url1)
 
 
-graph_height = 300
+colors = {'background': '#111111', 'text': '#7FDBFF', 'light': '#7f7f7f'}
 
-graph_config = {'modeBarButtonsToRemove' : ['hoverCompareCartesian','select2d', 'lasso2d'],
-                'doubleClick':  'reset+autosize', 'toImageButtonOptions': { 'height': None, 'width': None, },
-                'displaylogo': False}
+app = dash.Dash(__name__,
+                meta_tags=[{"name": "viewport", "content": "width=device-width, initial-scale=1"}],
+                requests_pathname_prefix='/co2/real_time/',
+                external_stylesheets=[dbc.themes.SLATE])
+server = app.server
 
-colors = {'background': '#111111', 'text': '#7FDBFF'}
-
-external_stylesheets = ['https://codepen.io./chriddyp/pen/bWLwgP.css']
-app = dash.Dash(__name__)
-
-app.layout = ddk.App([
-    ddk.Header([
-        # ddk.Logo(src=app.get_asset_url('logo.png'), style={
-        #     'max-height': 100,
-        #     'width': 'auto'
-        # }),
-        ddk.Title('ASVCO2 Reporting'),
-        ddk.SectionTitle('', id='final_date'),
-        dhtml.Button('Refresh', style={'float': 'right'}, id='refresh', n_clicks=0),
-    ]),
-dhtml.Div(style={'backgroundColor': colors['background']},
-          children=[
-    dhtml.Div(style={'backgroundColor': colors['background']},
-              children=[
-        ddk.Card(width=75,
-                 style={'backgroundColor': colors['background']},
-                 children=[dcc.Loading(id='graph_car',
-                                 children=[ddk.Graph(id='graphs', config=graph_config)]
-                                       )
-                           ]
-                 ),
-      # dhtml.Div(style={'backgroundColor': colors['background']},
-      #          children=[
-        ddk.Card(width=25,
-                style={'backgroundColor': colors['background']},
-               children=[dcc.DatePickerRange(
-                    id='date-picker',
-                    style={'backgroundColor': colors['background']},
-                    min_date_allowed=dataset.t_start,
-                    max_date_allowed=dataset.t_end,
-                    start_date=dataset.t_end - datetime.timedelta(days=14),
-                    end_date=dataset.t_end
-                ),
-                dhtml.Label(['Select Set']),
-                dcc.Dropdown(
-                    id="select_x",
-                    style={'backgroundColor': colors['background']},
-                    options=dataset.co2_custom_data(),
-                    value=dataset.co2_custom_data()[0]['value'],
+tools_card = dbc.Card(
+    dbc.CardBody(
+            style={'backgroundColor': colors['background']},
+            children=[dcc.DatePickerRange(
+                id='date-picker',
+                min_date_allowed=dataset.t_start,
+                max_date_allowed=dataset.t_end,
+                start_date=dataset.t_end - datetime.timedelta(days=14),
+                end_date=dataset.t_end),
+            dhtml.Label(['Select Mission']),
+            dcc.Dropdown(
+                    id='set-select',
+                    options=available_sets,
+                    value=available_sets[0]['value'],
                     clearable=False
-                )
-                ]
+                ),
+            dhtml.Label(['Select Plots']),
+            dcc.Dropdown(
+                    id="display-select",
+                    options=custom_sets,
+                    #value=custom_sets[0]['value'],
+                    value='co2_raw',
+                    clearable=False
             )
-    ])
-])
+        ])
+)
 
+graph_card = dbc.Card(
+    [dbc.CardBody(
+         [dcc.Loading(dcc.Graph(id='graphs'))]
+        )
+    ]
+)
+
+
+app.layout = dhtml.Div([
+    dbc.Card(
+        dbc.CardBody([
+            dbc.Row([dhtml.H1('ASVCO2 Real Time')]),
+            dbc.Row([
+                dbc.Col(children=[
+                        tools_card,
+                        dcc.RadioItems(id='mode-select',
+                           options=[{'label': 'Dark', 'value': 'Dark'},
+                                    {'label': 'Light', 'value': 'Light'}],
+                           value='Dark',
+                           persistence=True)],
+                        width=3),
+                dbc.Col(graph_card, width=9)
+            ])
+        ])
+    )
 ])
 
 '''
@@ -300,339 +117,558 @@ Callbacks
 #engineering data selection
 @app.callback(
     Output('graphs', 'figure'),
-    [Input('select_x', 'value'),
+    [Input('display-select', 'value'),
+     #Input('set-select', 'value'),
      Input('date-picker', 'start_date'),
-     Input('date-picker', 'end_date')
-     ])
+     Input('date-picker', 'end_date'),
+     Input('mode-select', 'value')#,
+     #Input('graphs', 'figure')
+     ],
+    State('set-select', 'value'))
 
-def plot_evar(selection, t_start, t_end):
+def plot_evar(selection, t_start, t_end, colormode, erddap_set):
 
-    def co2_raw(df):
+    def co2_raw(dataset):
         '''
+        #1
         'co2_raw'
+        'XCO2 Mean',
             Primary: XCO2_DRY_SW_MEAN_ASVCO2 & XCO2_DRY_AIR_MEAN_ASVCO2
             Secondary: SSS and SST
         '''
 
-        # for instr in states:
+        # df = dataset.get_data(variables=['XCO2_DRY_SW_MEAN_ASVCO2',
+        #                                     'XCO2_DRY_AIR_MEAN_ASVCO2',
+        #                                     'SAL_SBE37_MEAN',
+        #                                     'TEMP_SBE37_MEAN'])
 
-        # df['XCO2_DRY_SW_MEAN_ASVCO2'].dropna()
-        # df['XCO2_DRY_AIR_MEAN_ASVCO2'].dropna()
-        # df['SAL_SBE37_MEAN'].dropna()
-        # df['time'].dropna()
-
-        sw = go.Scatter(x=df['time'], y=df['XCO2_DRY_SW_MEAN_ASVCO2'].dropna(), name='Seawater CO2', hoverinfo='x+y+name')
-        air = go.Scatter(x=df['time'], y=df['XCO2_DRY_AIR_MEAN_ASVCO2'].dropna(), name='CO2 Air', hoverinfo='x+y+name')
-        sss = go.Scatter(x=df['time'], y=df['SAL_SBE37_MEAN'].dropna(), name='SSS', hoverinfo='x+y+name')
-        sst = go.Scatter(x=df['time'], y=df['TEMP_SBE37_MEAN'].dropna(), name='SST', hoverinfo='x+y+name')
+        df = dataset.get_data(variables=['XCO2_DRY_SW_MEAN_ASVCO2', 'XCO2_DRY_AIR_MEAN_ASVCO2', 'SAL_SBE37_MEAN', 'TEMP_SBE37_MEAN'],
+                              window_start=t_start, window_end=t_end)
 
         load_plots = make_subplots(rows=3, cols=1, shared_xaxes='all',
                                    subplot_titles=("XCO2 DRY", "SSS", "SST"),
                                    shared_yaxes=False, vertical_spacing=0.1)
 
-        load_plots.append_trace(sw, row=1, col=1)
-        load_plots.add_trace(air, row=1, col=1)
-        load_plots.append_trace(sss, row=2, col=1)
-        load_plots.append_trace(sst, row=3, col=1)
+        load_plots.add_scatter(x=df['time'], y=df['XCO2_DRY_SW_MEAN_ASVCO2'].dropna(), mode='markers',
+                               marker={'size': 2}, name='Seawater CO2', hoverinfo='x+y+name', row=1, col=1)
+        load_plots.add_scatter(x=df['time'], y=df['XCO2_DRY_AIR_MEAN_ASVCO2'], mode='markers',
+                               marker={'size': 2}, name='CO2 Air', hoverinfo='x+y+name', row=1, col=1)
+        load_plots.add_scatter(x=df['time'], y=df['SAL_SBE37_MEAN'].dropna(), mode='markers',
+                               marker={'size': 2}, name='SSS', hoverinfo='x+y+name', row=2, col=1)
+        load_plots.add_scatter(x=df['time'], y=df['TEMP_SBE37_MEAN'].dropna(), mode='markers',
+                               marker={'size': 2}, name='SST', hoverinfo='x+y+name', row=3, col=1)
 
 
-        load_plots['layout'].update(height=900,
-                                    title=' ',
-                                    hovermode='x unified',
-                                    xaxis_showticklabels=True,
+        load_plots['layout'].update(
                                     xaxis2_showticklabels=True, xaxis3_showticklabels=True,
                                     yaxis_fixedrange=True,
                                     yaxis2_fixedrange=True, yaxis3_fixedrange=True,
                                     yaxis_title='Dry CO2',
                                     yaxis2_title='Salinity', yaxis3_title='SW Temp',
-                                    showlegend=False, modebar={'orientation': 'h'}, autosize=True)
+                                    )
 
         return load_plots
 
-    def co2_res(data):
+
+    def co2_res(dataset):
         '''
+        #2
         'co2_res'
-            Primary: Calculate residual of XCO2_DRY_SW_MEAN_ASVCO2 & XCO2_DRY_AIR_MEAN_ASVCO2
+        'XCO2 Residuals',
+            Primary: Calculate residual of XCO2_DRY_SW_MEAN_ASVCO2 - XCO2_DRY_AIR_MEAN_ASVCO2
             Secondary: O2_SAT_SBE37_MEAN and/or O2_MEAN_ASVCO2
             '''
-        fig = go.Figure()
 
-        # for instr in states:
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'XCO2_DRY_SW_MEAN_ASVCO2', 'XCO2_DRY_AIR_MEAN_ASVCO2', 'O2_SAT_SBE37_MEAN', 'O2_MEAN_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        co2_diff = []
 
-        sec = go.Figure()
+        templist1 = df['XCO2_DRY_SW_MEAN_ASVCO2'].to_list()
+        templist2 = df['XCO2_DRY_AIR_MEAN_ASVCO2'].to_list()
 
-        return {1: fig}
+        for n in range(len(templist1)):
 
-    def co2_delt(data):
+            co2_diff.append(templist1[n] - templist2[n])
+
+        load_plots = make_subplots(rows=3, cols=1, shared_xaxes='all',
+                                   subplot_titles=("XCO2 DRY-AIR", "Mean O2 SBE37", "Mean O2 ASVCO2"),
+                                   shared_yaxes=False, vertical_spacing=0.1)
+
+        load_plots.add_scatter(x=df['time'], y=co2_diff, name='CO2 Diff', hoverinfo='x+y+name',
+                                mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=df['time'], y=df['O2_SAT_SBE37_MEAN'], name='O2_SAT_SBE37_MEAN', hoverinfo='x+y+name',
+                                mode='markers', marker={'size': 2}, row=2, col=1)
+
+        for n in range(1, len(states)):
+            cur_state = df[df['INSTRUMENT_STATE'] == states[n]]
+            load_plots.add_scatter(x=cur_state['time'], y=cur_state['O2_MEAN_ASVCO2'], name=states[n], hoverinfo='x+y+name',
+                                    mode='markers', marker={'size': 2},  row=3, col=1)
+
+
+        load_plots['layout'].update(xaxis2_showticklabels=True, xaxis3_showticklabels=True,
+                                    yaxis_fixedrange=True,
+                                    yaxis2_fixedrange=True, yaxis3_fixedrange=True,
+                                    yaxis_title='CO2 Diff (Dry-Air)',
+                                    yaxis2_title='O2 Mean', yaxis3_title='O2 Mean'
+                                    )
+
+        return load_plots
+
+
+    def co2_delt(dataset):
         '''
+        #3
         'co2_delt'
+        'XCO2 Delta',
             Primary: calculated pressure differentials between like states
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['CO2DETECTOR_PRESS_MEAN_ASVCO2',
+                                         'INSTRUMENT_STATE'],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        df.dropna(axis='rows', subset=['CO2DETECTOR_PRESS_MEAN_ASVCO2'], inplace=True)
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        load_plots = make_subplots(rows=1, cols=1,
+                                   subplot_titles=['Pressure'],
+                                   shared_yaxes=False)
 
-        sec = go.Figure()
+        temp1 = df[df['INSTRUMENT_STATE'] == 'ZPON']
+        temp2 = df[df['INSTRUMENT_STATE'] == 'ZPOFF']
 
-        return fig
+        templist1 = temp1['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
+        templist2 = temp2['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
 
-    def co2_det_state(data):
+        co2_diff = []
+
+        for n in range(len(templist1)):
+
+            co2_diff.append(templist1[n] - templist2[n])
+
+        load_plots.add_scatter(x=temp1['time'], y=co2_diff, name='ZP', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+
+        temp1 = df[df['INSTRUMENT_STATE'] == 'SPON']
+        temp2 = df[df['INSTRUMENT_STATE'] == 'SPOFF']
+
+        templist1 = temp1['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
+        templist2 = temp2['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
+
+        co2_diff = []
+
+        for n in range(len(templist1)):
+            co2_diff.append(templist1[n] - templist2[n])
+
+        load_plots.add_scatter(x=temp1['time'], y=co2_diff, name='SP', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+
+        temp1 = df[df['INSTRUMENT_STATE'] == 'EPON']
+        temp2 = df[df['INSTRUMENT_STATE'] == 'EPOFF']
+
+        templist1 = temp1['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
+        templist2 = temp2['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
+
+        co2_diff = []
+
+        for n in range(len(templist1)):
+            co2_diff.append(templist1[n] - templist2[n])
+
+        load_plots.add_scatter(x=temp1['time'], y=co2_diff, name='EP', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+
+        temp1 = df[df['INSTRUMENT_STATE'] == 'APON']
+        temp2 = df[df['INSTRUMENT_STATE'] == 'APOFF']
+
+        templist1 = temp1['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
+        templist2 = temp2['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
+
+        co2_diff = []
+
+        for n in range(len(templist1)):
+            co2_diff.append(templist1[n] - templist2[n])
+
+        load_plots.add_scatter(x=temp1['time'], y=co2_diff, name='AP', hoverinfo='x+y+name',
+                             mode='markers', marker={'size': 2}, row=1, col=1)
+
+        load_plots['layout'].update(yaxis_title='Pressure Mean')
+
+        return load_plots
+
+
+    def co2_det_state(dataset):
         '''
+        #4
         'co2_det_state'
+        'CO2 Pres. Mean',
             Primary: CO2DETECTOR_PRESS_MEAN_ASVCO2 for each state
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'CO2DETECTOR_PRESS_MEAN_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        temp = df[df['INSTRUMENT_STATE'] == 'ZPON']
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        load_plots = make_subplots(rows=1, cols=1,
+                                   subplot_titles=['Pressure'],
+                                   shared_yaxes=False)
 
-        sec = go.Figure()
+        load_plots.add_scatter(x=temp['time'], y=temp['CO2DETECTOR_PRESS_MEAN_ASVCO2'], name='ZPON', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
 
-        return {1: fig}
+        for n in range(1, len(states)):
 
-    def co2_mean_zp(data):
+             cur_state = df[df['INSTRUMENT_STATE'] == states[n]]
+
+             load_plots.add_scatter(x=cur_state['time'], y=cur_state['CO2DETECTOR_PRESS_MEAN_ASVCO2'],
+                                     name=states[n], hoverinfo='x+y+name',
+                                     mode='markers', marker={'size': 2},  row=1, col=1)
+
+        load_plots['layout'].update(yaxis_title='CO2 Mean Pressure')
+
+        return load_plots
+
+
+    def co2_mean_zp(dataset):
         '''
+        #5
         'co2_mean_zp'
+        'CO2 Mean',
             Primary: CO2_MEAN_ASVCO2 for ZPON, ZPOFF and ZPPCAL
             Secondary: CO2DETECTOR_TEMP_MEAN_ASVCO2 for ZPOFF
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'CO2_MEAN_ASVCO2', "CO2DETECTOR_TEMP_MEAN_ASVCO2"],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        primary1 = df[df['INSTRUMENT_STATE'] == 'ZPON']
+        primary2 = df[df['INSTRUMENT_STATE'] == 'ZPOFF']
+        primary3 = df[df['INSTRUMENT_STATE'] == 'ZPPCAL']
+        secondary = df[df['INSTRUMENT_STATE'] == 'ZPOFF']
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        load_plots = make_subplots(rows=2, cols=1, shared_xaxes='all',
+                                   subplot_titles=("CO2_MEAN_ASVCO2", "CO2DETECTOR_TEMP_MEAN_ASVCO2"),
+                                   shared_yaxes=False, vertical_spacing=0.1)
 
-        sec = go.Figure()
+        load_plots.add_scatter(x=primary1['time'], y=primary1['CO2_MEAN_ASVCO2'], name='ZPON', hoverinfo='x+y+name',
+                                mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=primary2['time'], y=primary2['CO2_MEAN_ASVCO2'], name='ZPOFF', hoverinfo='x+y+name',
+                                mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=primary3['time'], y=primary3['CO2_MEAN_ASVCO2'], name='ZPPCAL', hoverinfo='x+y+name',
+                                mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=secondary['time'], y=secondary['CO2DETECTOR_TEMP_MEAN_ASVCO2'].dropna(),
+                                name='ZPOFF', hoverinfo='x+y+name',
+                                mode='markers', marker={'size': 2}, row=2, col=1)
 
-        return {1: fig}
 
-    def co2_mean_sp(data):
+        load_plots['layout'].update(xaxis2_showticklabels=True,
+                                    yaxis2_fixedrange=True,
+                                    yaxis_title='CO2 Mean',
+                                    yaxis2_title='Temp. Mean',
+                                    )
+
+        return load_plots
+
+
+    def co2_mean_sp(dataset):
         '''
+        #6
         'co2_mean_sp'
+        'CO2 Mean SP',
             Primary: CO2_MEAN_ASVCO2 for SPON, SPOFF, SPPCAL
             Secondary: CO2_MEAN_ASVCO2 SPOFF
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', "CO2_MEAN_ASVCO2", "CO2DETECTOR_TEMP_MEAN_ASVCO2"],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        primary1 = df[df['INSTRUMENT_STATE'] == 'SPON']
+        primary2 = df[df['INSTRUMENT_STATE'] == 'SPOFF']
+        primary3 = df[df['INSTRUMENT_STATE'] == 'SPPCAL']
+        secondary = df[df['INSTRUMENT_STATE'] == 'SPOFF']
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        load_plots = make_subplots(rows=2, cols=1, shared_xaxes='all',
+                                   subplot_titles=("CO2_MEAN_ASVCO2", "CO2DETECTOR_TEMP_MEAN_ASVCO2"),
+                                   shared_yaxes=False, vertical_spacing=0.1)
 
-        sec = go.Figure()
+        load_plots.add_scatter(x=primary1['time'], y=primary1['CO2_MEAN_ASVCO2'], name='SPON', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=primary2['time'], y=primary2['CO2_MEAN_ASVCO2'], name='SPOFF', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=primary3['time'], y=primary3['CO2_MEAN_ASVCO2'], name='SPPCAL', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=secondary['time'], y=secondary['CO2DETECTOR_TEMP_MEAN_ASVCO2'].dropna(), name='ZPOFF',
+                               hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=2, col=1)
 
-        return {1: fig}
 
-    def co2_span_temp(data):
+        load_plots['layout'].update(xaxis2_showticklabels=True,
+                                    yaxis2_fixedrange=True,
+                                    yaxis_title='CO2 Mean',
+                                    yaxis2_title='Temp Mean'
+                                    )
+
+        return load_plots
+
+
+    def co2_span_temp(dataset):
         '''
+        #7
         'co2_span_temp'
+        'CO2 Span & Temp'
             Primary: CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2 vs. SPOFF CO2DETECTOR_TEMP_MEAN_ASVCO2
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'CO2DETECTOR_TEMP_MEAN_ASVCO2',
+                                         'CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        dset = df[df['INSTRUMENT_STATE'] == 'SPOFF']
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        co2 = go.Scatter()
 
-        sec = go.Figure()
+        load_plots = make_subplots(rows=1, cols=1, shared_xaxes='all', subplot_titles=['SPOFF Temp vs Span'],
+                                   shared_yaxes=False, vertical_spacing=0.1)
 
-        return {1: fig}
+        load_plots.add_scatter(x=dset['CO2DETECTOR_TEMP_MEAN_ASVCO2'], y=dset['CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2'],
+                               name='CO2 Detector', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
 
-    def co2_zero_temp(data):
+        load_plots['layout'].update(xaxis_title='Temp Mean',
+                                    yaxis_title='Span Coefficient'
+                                    )
+
+        return load_plots
+
+
+    def co2_zero_temp(dataset):
         '''
+        #8
         'co2_zero_temp'
+        'CO2 Zero Temp',
             Primary: CO2DETECTOR_ZERO_COEFFICIENT_ASVCO2 vs. ZPOFF CO2DETECTOR_TEMP_MEAN_ASVCO2
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'CO2DETECTOR_TEMP_MEAN_ASVCO2',
+                                         'CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        dset = df[df['INSTRUMENT_STATE'] == 'ZPOFF']
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        load_plots = make_subplots(rows=1, cols=1, shared_xaxes='all', subplot_titles=['Zero Coefficient'],
+                                   shared_yaxes=False, vertical_spacing=0.1)
 
-        sec = go.Figure()
+        load_plots.add_scatter(x=dset['CO2DETECTOR_TEMP_MEAN_ASVCO2'], y=dset['CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2'],
+                               name='CO2 Detector', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
 
-        return {1: fig}
+        load_plots['layout'].update(xaxis_title='Temp Mean',
+                                    yaxis_title='Span Coefficient',
+                                    )
 
-    def co2_stddev(data):
+        return load_plots
+
+
+    def co2_stddev(dataset):
         '''
+        #9
         'co2_stddev'
+        'CO2 STDDEV',
             Primary: CO2_STDDEV_ASVCO2
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'CO2_STDDEV_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        load_plots = make_subplots(rows=1, cols=1, shared_xaxes='all', subplot_titles=('CO2 Standard Deviation'),
+                                   shared_yaxes=False, vertical_spacing=0.1)
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        for n in range(1, len(states)):
+            cur_state = df[df['INSTRUMENT_STATE'] == states[n]]
+            load_plots.add_scatter(x=cur_state['time'], y=cur_state['CO2_STDDEV_ASVCO2'], name=states[n], hoverinfo='x+y+name',
+                                   mode='markers', marker={'size': 2}, row=1, col=1)
 
-        sec = go.Figure()
+        load_plots['layout'].update(yaxis_title='CO2_STDDEV_ASVCO2')
 
-        return {1: fig}
+        return load_plots
 
-    def o2_mean(data):
+
+    def o2_mean(dataset):
         '''
+        #10
         'o2_mean'
+        'O2 Mean',
             Primary: O2_MEAN_ASVCO2 for APOFF and EPOFF
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'O2_MEAN_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        apoff = df[df['INSTRUMENT_STATE'] == 'APOFF']
+        epoff = df[df['INSTRUMENT_STATE'] == 'EPOFF']
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        load_plots = make_subplots(rows=2, cols=1, shared_xaxes='all', subplot_titles=['O2 - APOFF', 'O2 -  EPOFF'],
+                                   shared_yaxes=False, vertical_spacing=0.1)
 
-        sec = go.Figure()
+        load_plots.add_scatter(x=apoff['time'], y=apoff['O2_MEAN_ASVCO2'], name='SPOFF', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=epoff['time'], y=epoff['O2_MEAN_ASVCO2'], name='EPOFF', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=2, col=1)
 
-        return {1: fig}
+        load_plots['layout'].update(yaxis_title='SPOFF',
+                                    yaxis2_title='EPOFF',
+                                    )
 
-    def co2_span(data):
+        return load_plots
+
+
+    def co2_span(dataset):
         '''
+        #11
         'co2_span'
+        'CO2 Span',
             Primary: CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2
             Secondary: CO2DETECTOR_TEMP_MEAN_ASVCO2 for SPOFF
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2',
+                                         'CO2DETECTOR_TEMP_MEAN_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        dset = df[df['INSTRUMENT_STATE'] == 'SPOFF']
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        load_plots = make_subplots(rows=2, cols=1, shared_xaxes='all', subplot_titles=['Span Coeffient', 'Mean Temperature - SPOFF'],
+                                   shared_yaxes=False, vertical_spacing=0.1)
 
-        sec = go.Figure()
+        load_plots.add_scatter(x=df['time'], y=df['CO2DETECTOR_SPAN_COEFFICIENT_ASVCO2'],
+                               name='CO2 Span Coef.', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=dset['time'], y=df['CO2DETECTOR_TEMP_MEAN_ASVCO2'],
+                               name='Temp Mean', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=2, col=1)
 
-        return {1: fig}
+        load_plots['layout'].update(xaxis2_showticklabels=True,
+                                    yaxis2_fixedrange=True,
+                                    yaxis_title='Span Coef',
+                                    yaxis2_title='Temp Mean',
+                                    )
 
-    def co2_zero(data):
+        return load_plots
+
+
+    def co2_zero(dataset):
         '''
+        #12
         'co2_zero'
+        'CO2 Zero',
             Primary: CO2DETECTOR_ZERO_COEFFICIENT_ASVCO2
             Secondary: CO2DETECTOR_TEMP_MEAN_ASVCO2 for ZPOFF
         '''
-        fig = go.Figure()
 
-        # for instr in states:
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'CO2DETECTOR_ZERO_COEFFICIENT_ASVCO2',
+                                         'CO2DETECTOR_TEMP_MEAN_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
 
-        data['WIND_FROM_MEAN'].dropna()
-        data['time'].dropna()
+        dset = df[df['INSTRUMENT_STATE'] == 'ZPOFF']
 
-        fig = px.scatter(data,
-                         y='WIND_FROM_MEAN',
-                         x='time',
-                         color='INSTRUMENT_STATE',
-                         symbol='INSTRUMENT_STATE')
+        load_plots = make_subplots(rows=2, cols=1, shared_xaxes='all', subplot_titles=['Zero Span Coefficient', 'Temperature Mean - ZPOFF'],
+                                   shared_yaxes=False, vertical_spacing=0.1)
 
-        sec = go.Figure()
+        load_plots.add_scatter(x=df['time'], y=df['CO2DETECTOR_ZERO_COEFFICIENT_ASVCO2'],
+                               name='CO2 Span Coef.', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+        load_plots.add_scatter(x=dset['time'], y=df['CO2DETECTOR_TEMP_MEAN_ASVCO2'],
+                               name='Temp Mean', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=2, col=1)
 
-        return {1: fig}
+        load_plots['layout'].update(xaxis2_showticklabels=True,
+                                    yaxis2_fixedrange=True,
+                                    yaxis_title='Span Coef',
+                                    yaxis2_title='Temp Mean',
+                                    )
 
-    def switch_plot(case, data):
-        return {'co2_raw':      co2_raw(data),
-        'co2_res':          co2_res(data),
-        'co2_delt':         co2_delt(data),
-        'co2_det_state':    co2_det_state(data),
-        'co2_mean_zp':      co2_mean_zp(data),
-        'co2_mean_sp':      co2_mean_sp(data),
-        'co2_span_temp':    co2_span_temp(data),
-        'co2_zero_temp':    co2_zero_temp(data),
-        'co2_stddev':       co2_stddev(data),
-        'o2_mean':          o2_mean(data),
-        'co2_span':         co2_span(data),
-        'co2_zero':         co2_zero(data)
+        return load_plots
+
+
+    def pres_state(dataset):
+        '''
+        #13
+        'pres_state'
+        'Pressure State',
+            Primary: CO2DETECTOR_ZERO_COEFFICIENT_ASVCO2
+            Secondary: CO2DETECTOR_TEMP_MEAN_ASVCO2 for ZPOFF
+        '''
+
+        df = dataset.get_data(variables=['INSTRUMENT_STATE', 'CO2DETECTOR_PRESS_MEAN_ASVCO2',
+                                         'CO2DETECTOR_PRESS_UNCOMP_STDDEV_ASVCO2'],
+                              window_start=t_start, window_end=t_end)
+
+        dset = df[df['INSTRUMENT_STATE'] == 'APOFF']
+
+        pres_diff = []
+
+        templist1 = dset['CO2DETECTOR_PRESS_MEAN_ASVCO2'].to_list()
+        templist2 = dset['CO2DETECTOR_PRESS_UNCOMP_STDDEV_ASVCO2'].to_list()
+
+        for n in range(len(templist1)):
+
+            pres_diff.append(templist1[n] - templist2[n])
+
+        load_plots = make_subplots(rows=1, cols=1, shared_xaxes='all', subplot_titles=['Pressure Differential - APOFF'],
+                                   shared_yaxes=False, vertical_spacing=0.1)
+
+        load_plots.add_scatter(x=dset['time'], y=pres_diff,
+                               name='CO2 Span Coef.', hoverinfo='x+y+name',
+                               mode='markers', marker={'size': 2}, row=1, col=1)
+
+        load_plots['layout'].update(yaxis_title='Pres. Diff.')
+
+        return load_plots
+
+    def switch_plot(case):
+        return {'co2_raw':      co2_raw,
+        'co2_res':          co2_res,
+        'co2_delt':         co2_delt,
+        'co2_det_state':    co2_det_state,
+        'co2_mean_zp':      co2_mean_zp,
+        'co2_mean_sp':      co2_mean_sp,
+        'co2_span_temp':    co2_span_temp,
+        'co2_zero_temp':    co2_zero_temp,
+        'co2_stddev':       co2_stddev,
+        'o2_mean':          o2_mean,
+        'co2_span':         co2_span,
+        'co2_zero':         co2_zero,
+        'pres_state':       pres_state
         }.get(case)
 
     states = ['ZPON', 'ZPOFF', 'ZPPCAL', 'SPON', 'SPOFF', 'SPPCAL', 'EPON', 'EPOFF', 'APON', 'APOFF']
 
-    data = dataset.ret_data(t_start=t_start, t_end=t_end)
+    dataset = data_import.Dataset(erddap_set)
 
-    plotters = switch_plot(selection, data)
+    plotters = switch_plot(selection)(dataset)
 
-    #pri_fig = plotters[1]
-    #sec_fig = plotters[2]
-    #ter_fig = plotters[3]
-
-    #efig = px.scatter(data, y=y_set, x=x_set)#, color="sepal_length", color_continuous_scale='oxy')
-
+    bkgrd_colors = {'Dark': 'background',
+                    'Light': 'light'}
 
     plotters.update_layout(
-        plot_bgcolor=colors['background'],
-        paper_bgcolor=colors['background'],
-        font_color=colors['text']
+         height=600,
+         title=' ',
+         hovermode='x unified',
+         xaxis_showticklabels=True,
+         plot_bgcolor=colors[bkgrd_colors[colormode]],
+         paper_bgcolor=colors['background'],
+         font_color=colors['text'],
+         autosize=True,
+         showlegend = False,
+         modebar = {'orientation': 'h'},
+         margin = dict(l=25, r=25, b=25, t=25, pad=4)
     )
 
     return plotters
 
+
+
 if __name__ == '__main__':
     #app.run_server(host='0.0.0.0', port=8050, debug=True)
-
 
     app.run_server(debug=True)
